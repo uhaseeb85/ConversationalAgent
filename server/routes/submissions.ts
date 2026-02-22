@@ -67,7 +67,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const row = await queryOne<SubRow>('SELECT * FROM submissions WHERE id = $1', [id])
     res.status(201).json({ submission: formatSub(row!) })
   } catch (err) {
-    console.error('[submissions] create error:', err)
+    // Don't log full error (may contain sensitive data)
+    console.error('[submissions] create error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to create submission' })
   }
 })

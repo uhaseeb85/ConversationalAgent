@@ -79,7 +79,7 @@ router.post('/:id/set-temp-password', async (req: AuthRequest, res: Response) =>
     )
     res.json({ ok: true })
   } catch (err) {
-    console.error('[users] set-temp-password error:', err)
+    console.error('[users] set-temp-password error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to set temporary password' })
   }
 })
@@ -194,7 +194,7 @@ router.get('/stats/overview', async (_req: AuthRequest, res: Response) => {
       topUsers,
     })
   } catch (err) {
-    console.error('[stats] error:', err)
+    console.error('[stats] error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to fetch stats' })
   }
 })

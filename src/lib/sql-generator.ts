@@ -2,6 +2,26 @@ import { Submission, OnboardingFlow, Response, SQLOperation, SQLCondition } from
 import { format } from 'date-fns'
 
 /**
+ * Validates SQL identifiers (table/column names) to prevent SQL injection
+ * Only allows alphanumeric characters, underscores, and periods
+ */
+function validateSQLIdentifier(identifier: string, context: string): void {
+  // Allow alphanumeric, underscore, period (for schema.table)
+  const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$/
+  if (!validPattern.test(identifier)) {
+    throw new Error(
+      `Invalid ${context}: "${identifier}". Only alphanumeric characters, underscores, and schema.table format are allowed.`
+    )
+  }
+  
+  // Prevent SQL keywords as identifiers
+  const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'EXEC', 'EXECUTE']
+  if (sqlKeywords.includes(identifier.toUpperCase())) {
+    throw new Error(`Invalid ${context}: "${identifier}" is a reserved SQL keyword`)
+  }
+}
+
+/**
  * Escapes SQL string values to prevent injection
  */
 function escapeSQLString(value: string): string {
@@ -18,7 +38,12 @@ function formatSQLValue(value: string | number | boolean | string[] | null, type
 
   switch (type) {
     case 'number':
-      return String(value)
+      // Ensure it's actually a number to prevent injection
+      const num = Number(value)
+      if (isNaN(num)) {
+        throw new Error(`Invalid number value: ${value}`)
+      }
+      return String(num)
     
     case 'yes-no':
       return value === true || value === 'yes' ? '1' : '0'
@@ -27,6 +52,9 @@ function formatSQLValue(value: string | number | boolean | string[] | null, type
       if (typeof value === 'string') {
         try {
           const date = new Date(value)
+          if (isNaN(date.getTime())) {
+            throw new Error(`Invalid date: ${value}`)
+          }
           return `'${format(date, 'yyyy-MM-dd')}'`
         } catch {
           return `'${escapeSQLString(String(value))}'`
@@ -87,6 +115,9 @@ function generateWhereClause(
   }
 
   const clauses = conditions.map((condition) => {
+    // Validate column name
+    validateSQLIdentifier(condition.columnName, 'WHERE column name')
+    
     const value = resolveConditionValue(condition, responses, flow)
     
     switch (condition.operator) {
@@ -118,10 +149,16 @@ function generateInsertSQL(
   responses: Response[],
   flow: OnboardingFlow
 ): string {
+  // Validate table name
+  validateSQLIdentifier(operation.tableName, 'table name')
+  
   const columns: string[] = []
   const values: string[] = []
 
   operation.columnMappings.forEach((mapping) => {
+    // Validate column name
+    validateSQLIdentifier(mapping.columnName, 'column name')
+    
     const response = responses.find((r) => r.questionId === mapping.questionId)
     const question = flow.questions.find((q) => q.id === mapping.questionId)
     
@@ -144,9 +181,15 @@ function generateUpdateSQL(
   responses: Response[],
   flow: OnboardingFlow
 ): string {
+  // Validate table name
+  validateSQLIdentifier(operation.tableName, 'table name')
+  
   const setClauses: string[] = []
 
   operation.columnMappings.forEach((mapping) => {
+    // Validate column name
+    validateSQLIdentifier(mapping.columnName, 'column name')
+    
     const response = responses.find((r) => r.questionId === mapping.questionId)
     const question = flow.questions.find((q) => q.id === mapping.questionId)
     
@@ -171,6 +214,9 @@ function generateDeleteSQL(
   responses: Response[],
   flow: OnboardingFlow
 ): string {
+  // Validate table name
+  validateSQLIdentifier(operation.tableName, 'table name')
+  
   const whereClause = generateWhereClause(operation.conditions, responses, flow)
 
   return `DELETE FROM ${operation.tableName}
@@ -215,10 +261,17 @@ export function generateSQL(submission: Submission, flow: OnboardingFlow): strin
 
   // Legacy single-table INSERT support (backward compatibility)
   const { tableName, questions } = flow
+  
+  // Validate table name
+  validateSQLIdentifier(tableName, 'table name')
+  
   const columns: string[] = []
   const values: string[] = []
 
   questions.forEach((question) => {
+    // Validate column name
+    validateSQLIdentifier(question.sqlColumnName, 'column name')
+    
     const response = responses.find((r) => r.questionId === question.id)
     
     if (!response && !question.required) {

@@ -55,7 +55,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const row = await queryOne<FlowRow>('SELECT * FROM flows WHERE id = $1', [id])
     res.status(201).json({ flow: formatFlow(row!) })
   } catch (err) {
-    console.error('[flows] create error:', err)
+    console.error('[flows] create error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to create flow' })
   }
 })
@@ -85,7 +85,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const row = await queryOne<FlowRow>('SELECT * FROM flows WHERE id = $1', [req.params.id])
     res.json({ flow: formatFlow(row!) })
   } catch (err) {
-    console.error('[flows] update error:', err)
+    console.error('[flows] update error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to update flow' })
   }
 })

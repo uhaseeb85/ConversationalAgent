@@ -143,6 +143,15 @@ All routes are prefixed `/api/`.
 - All IDs are 32-char hex strings generated with `crypto.randomBytes(16).toString('hex')`
 - SQL for the **app database** uses `$1`-style positional parameters (the adapter maps them to `?` for SQLite automatically)
 
+### Security Guidelines
+
+- **Never log sensitive data**: Use `err instanceof Error ? err.message : 'Unknown error'` instead of logging full error objects
+- **Validate all SQL identifiers**: Use `validateSQLIdentifier()` from `sql-generator.ts` for table/column names
+- **Rate limiting**: Apply `express-rate-limit` to sensitive endpoints (login, password reset)
+- **Input validation**: Always validate and sanitize user input before processing
+- **Error messages**: Never expose internal details or stack traces to clients
+- **Environment validation**: Critical settings like `JWT_SECRET` and `ALLOWED_ORIGIN` are validated at startup in production
+
 ## Common Patterns
 
 ### Adding a new API route

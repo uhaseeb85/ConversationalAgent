@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'
+import rateLimit from 'express-rate-limit'
 import { query, queryOne } from '../lib/app-db'
 import { hashPassword, verifyPassword, signToken, COOKIE_NAME, COOKIE_OPTIONS } from '../lib/auth'
 import { requireAuth, AuthRequest } from '../middleware/requireAuth'
@@ -6,6 +7,23 @@ import { sendPasswordResetEmail } from '../lib/mailer'
 import crypto from 'node:crypto'
 
 const router = Router()
+
+// Rate limiters for auth endpoints
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: 'Too many login attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 requests per hour
+  message: 'Too many password reset requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 // ─── Register ────────────────────────────────────────────────────────────────
 router.post('/register', async (req: Request, res: Response) => {
@@ -40,13 +58,13 @@ router.post('/register', async (req: Request, res: Response) => {
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS)
     res.status(201).json({ user: formatUser(user!) })
   } catch (err) {
-    console.error('[auth] register error:', err)
+    console.error('[auth] register error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Registration failed' })
   }
 })
 
 // ─── Login ────────────────────────────────────────────────────────────────────
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body as { email: string; password: string }
     if (!email || !password) {
@@ -75,7 +93,7 @@ router.post('/login', async (req: Request, res: Response) => {
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS)
     res.json({ user: formatUser(user) })
   } catch (err) {
-    console.error('[auth] login error:', err)
+    console.error('[auth] login error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Login failed' })
   }
 })
@@ -132,13 +150,13 @@ router.post('/change-password', requireAuth, async (req: AuthRequest, res: Respo
 
     res.json({ ok: true })
   } catch (err) {
-    console.error('[auth] change-password error:', err)
+    console.error('[auth] change-password error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to change password' })
   }
 })
 
 // ─── Forgot Password ──────────────────────────────────────────────────────────
-router.post('/forgot-password', async (req: Request, res: Response) => {
+router.post('/forgot-password', passwordResetLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body as { email: string }
     if (!email) {
@@ -170,7 +188,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 
     res.json({ ok: true })
   } catch (err) {
-    console.error('[auth] forgot-password error:', err)
+    console.error('[auth] forgot-password error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to process request' })
   }
 })
@@ -212,7 +230,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 
     res.json({ ok: true })
   } catch (err) {
-    console.error('[auth] reset-password error:', err)
+    console.error('[auth] reset-password error:', err instanceof Error ? err.message : 'Unknown error')
     res.status(500).json({ error: 'Failed to reset password' })
   }
 })
