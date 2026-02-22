@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { CheckCircle2, Bot, User, Copy, ArrowLeft } from 'lucide-react'
+import { streamChatCompletion, loadAIConfig, AIConfig } from '@/lib/ai-client'
 
 
 export function OnboardPage() {
@@ -28,6 +29,7 @@ export function OnboardPage() {
   const [completedSubmission, setCompletedSubmission] = useState<Submission | null>(null)
   const [copiedSQL, setCopiedSQL] = useState(false)
   const [startedAt] = useState(new Date())
+  const [aiConfig] = useState<AIConfig>(() => loadAIConfig())
 
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -106,15 +108,57 @@ export function OnboardPage() {
       return
     }
 
-    setIsTyping(true)
-    setTimeout(() => {
+    const qIndex = flowData.questions.indexOf(nextQuestion)
+
+    if (aiConfig.enabled) {
+      setIsTyping(true)
+
+      const systemPrompt = `You are a friendly onboarding assistant for "${flowData.name}". 
+Rephrase and ask this question conversationally in 1-2 sentences: "${nextQuestion.label}"${
+  nextQuestion.helpText ? `\nHint: ${nextQuestion.helpText}` : ''
+}
+Be warm and concise. Do not add unrelated commentary.`
+
+      // Seed an empty bot message that we will stream into
       setChatMessages((prev) => [
         ...prev,
-        { type: 'bot', content: nextQuestion.label, questionId: nextQuestion.id },
+        { type: 'bot' as const, content: '', questionId: nextQuestion.id },
       ])
-      setIsTyping(false)
-      setCurrentQuestionIndex(flowData.questions.indexOf(nextQuestion))
-    }, 800)
+
+      streamChatCompletion(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Ask the question now.' },
+        ],
+        (chunk) => {
+          setChatMessages((prev) => {
+            // Find the last bot message (the one we just seeded)
+            let lastBotIdx = -1
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].type === 'bot') { lastBotIdx = i; break }
+            }
+            if (lastBotIdx < 0) return prev
+            const updated = [...prev]
+            updated[lastBotIdx] = { ...updated[lastBotIdx], content: updated[lastBotIdx].content + chunk }
+            return updated
+          })
+        },
+        aiConfig
+      ).finally(() => {
+        setIsTyping(false)
+        setCurrentQuestionIndex(qIndex)
+      })
+    } else {
+      setIsTyping(true)
+      setTimeout(() => {
+        setChatMessages((prev) => [
+          ...prev,
+          { type: 'bot', content: nextQuestion.label, questionId: nextQuestion.id },
+        ])
+        setIsTyping(false)
+        setCurrentQuestionIndex(qIndex)
+      }, 800)
+    }
   }
 
   const handleSubmitAnswer = () => {

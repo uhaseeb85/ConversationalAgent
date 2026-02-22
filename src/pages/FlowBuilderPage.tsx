@@ -8,11 +8,12 @@ import { Textarea } from '@/components/ui/Textarea'
 import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { QuestionBuilder } from '@/components/QuestionBuilder'
+import { SchemaImporter } from '@/components/SchemaImporter'
 import { Question, SQLOperation, SQLOperationType, ColumnMapping, SQLCondition } from '@/types'
 import { generateId } from '@/lib/utils'
-import { Save, ArrowLeft, Database, HelpCircle, PlaySquare, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Save, ArrowLeft, Database, HelpCircle, PlaySquare, Plus, Trash2, ChevronDown, ChevronRight, Import } from 'lucide-react'
 
-type Tab = 'details' | 'schema' | 'questions' | 'simulator'
+type Tab = 'details' | 'schema' | 'questions' | 'import' | 'simulator'
 
 export function FlowBuilderPage() {
   const { id } = useParams()
@@ -259,6 +260,17 @@ export function FlowBuilderPage() {
           >
             <HelpCircle className="h-4 w-4 inline-block mr-1" />
             Questions
+          </button>
+          <button
+            onClick={() => setActiveTab('import')}
+            className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'import'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
+            }`}
+          >
+            <Import className="h-4 w-4 inline-block mr-1" />
+            Import Schema
           </button>
           <button
             onClick={() => setActiveTab('simulator')}
@@ -646,6 +658,17 @@ export function FlowBuilderPage() {
           onUpdateQuestion={handleUpdateQuestion}
           onDeleteQuestion={handleDeleteQuestion}
           onReorderQuestions={handleReorderQuestions}
+        />
+      )}
+
+      {activeTab === 'import' && (
+        <SchemaImporter
+          questions={questions}
+          onApply={(newQuestions, newOperations) => {
+            setQuestions([...questions, ...newQuestions])
+            setSqlOperations([...sqlOperations, ...newOperations])
+            setActiveTab('questions')
+          }}
         />
       )}
 

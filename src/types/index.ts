@@ -81,12 +81,29 @@ export interface OnboardingFlow {
   createdAt: Date
   updatedAt: Date
   isActive: boolean
+  createdBy?: string | null
+  schemaContext?: string | null
 }
 
 // Individual response to a question
 export interface Response {
   questionId: string
   value: string | number | boolean | string[] | null
+}
+
+// User and auth
+export type UserRole = 'admin' | 'user'
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  isActive: boolean
+  mustChangePassword?: boolean
+  createdAt: string
+  lastLoginAt?: string | null
+  submissionCount?: number
 }
 
 // Submission status
@@ -97,11 +114,13 @@ export interface Submission {
   id: string
   flowId: string
   flowName: string
+  userId?: string | null
   responses: Response[]
   startedAt: Date
   completedAt: Date
   status: SubmissionStatus
   generatedSQL?: string
+  executedAt?: string | null
 }
 
 // Store structure for Zustand
@@ -115,4 +134,64 @@ export interface AppStore {
   deleteFlow: (id: string) => void
   addSubmission: (submission: Submission) => void
   updateSubmission: (id: string, submission: Partial<Submission>) => void
+}
+
+// DB connection config stored in sessionStorage
+export interface DBConnectionConfig {
+  type: 'postgresql' | 'sqlite'
+  connectionString: string
+  label?: string
+}
+
+// DB schema types (returned from backend)
+export interface SchemaColumn {
+  name: string
+  dataType: string
+  nullable: boolean
+  isPrimaryKey: boolean
+  checkValues?: string[]
+}
+
+export interface SchemaTable {
+  name: string
+  columns: SchemaColumn[]
+}
+
+// Result of a single SQL statement execution
+export interface StatementResult {
+  statement: string
+  rowsAffected: number
+  success: boolean
+  error?: string
+}
+
+// Full execution result (transaction-level)
+export interface ExecutionResult {
+  ok: boolean
+  results?: StatementResult[]
+  rolledBack?: boolean
+  error?: string
+}
+
+// AI configuration
+export interface AIConfig {
+  baseUrl: string
+  apiKey: string
+  model: string
+  enabled: boolean
+}
+
+// Execution history entry
+export interface ExecutionHistory {
+  id: string
+  submissionId: string
+  userId: string | null
+  userName?: string
+  userEmail?: string
+  flowName?: string
+  statement: string
+  success: boolean
+  rowsAffected?: number | null
+  errorMessage?: string | null
+  executedAt: string
 }
