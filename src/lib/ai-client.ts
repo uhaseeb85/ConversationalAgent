@@ -10,6 +10,68 @@ export interface ChatMessage {
   content: string
 }
 
+export interface AIModel {
+  id: string
+  name: string
+  description?: string
+  pricing?: {
+    prompt: number
+    completion: number
+  }
+}
+
+export interface AIProvider {
+  id: string
+  name: string
+  baseUrl: string
+  defaultApiKey: string
+  defaultModel: string
+  description: string
+}
+
+export const AI_PROVIDERS: AIProvider[] = [
+  {
+    id: 'lmstudio',
+    name: 'LM Studio',
+    baseUrl: 'http://localhost:1234/v1',
+    defaultApiKey: 'lmstudio',
+    defaultModel: 'local-model',
+    description: 'Local open-source models',
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    defaultApiKey: 'ollama',
+    defaultModel: 'mistral',
+    description: 'Open-source models via Ollama',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultApiKey: 'sk-or-...',
+    defaultModel: 'openai/gpt-4o-mini',
+    description: 'Access to multiple AI models',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultApiKey: 'sk-...',
+    defaultModel: 'gpt-4o-mini',
+    description: 'OpenAI GPT models',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultApiKey: 'sk-ant-...',
+    defaultModel: 'claude-3-5-haiku-20241022',
+    description: 'Anthropic Claude models',
+  },
+]
+
 const CONFIG_KEY = 'ai_config'
 
 export function loadAIConfig(): AIConfig {
@@ -27,6 +89,54 @@ export function loadAIConfig(): AIConfig {
 
 export function saveAIConfig(config: AIConfig): void {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config))
+}
+
+/**
+ * Fetches available models from OpenRouter API
+ * Returns empty array for non-OpenRouter endpoints
+ */
+export async function fetchOpenRouterModels(apiKey: string): Promise<AIModel[]> {
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'Conversational Onboarding',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch models: ${response.status}`)
+    }
+
+    const data = await response.json() as {
+      data: Array<{
+        id: string
+        name: string
+        description?: string
+        pricing?: {
+          prompt: string
+          completion: string
+        }
+      }>
+    }
+
+    return data.data.map((model) => ({
+      id: model.id,
+      name: model.name || model.id,
+      description: model.description,
+      pricing: model.pricing
+        ? {
+            prompt: parseFloat(model.pricing.prompt),
+            completion: parseFloat(model.pricing.completion),
+          }
+        : undefined,
+    }))
+  } catch (err) {
+    console.error('Failed to fetch OpenRouter models:', err)
+    return []
+  }
 }
 
 /**

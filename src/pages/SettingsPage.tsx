@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
-import { loadAIConfig, saveAIConfig, chatCompletion } from '@/lib/ai-client'
+import { loadAIConfig, saveAIConfig, chatCompletion, fetchOpenRouterModels, AI_PROVIDERS, type AIModel } from '@/lib/ai-client'
 import { connectDB } from '@/lib/db-api'
-import { Settings, Bot, Database, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, KeyRound, AlertTriangle } from 'lucide-react'
+import { Settings, Bot, Database, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, KeyRound, AlertTriangle, RefreshCw } from 'lucide-react'
 
 export function SettingsPage() {
   const { user, setUser } = useAuth()
@@ -20,6 +20,10 @@ export function SettingsPage() {
   const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [showApiKey, setShowApiKey] = useState(false)
   const [aiSaved, setAiSaved] = useState(false)
+  const [aiModels, setAiModels] = useState<AIModel[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const [selectedProvider, setSelectedProvider] = useState<string>('')
 
   // Change password
   const [cpCurrent, setCpCurrent] = useState('')
@@ -69,10 +73,53 @@ export function SettingsPage() {
   const [testingDB, setTestingDB] = useState(false)
   const [dbTestResult, setDbTestResult] = useState<{ ok: boolean; message: string; tables?: string[] } | null>(null)
 
+  const handleSelectProvider = (providerId: string) => {
+    const provider = AI_PROVIDERS.find((p) => p.id === providerId)
+    if (!provider) return
+
+    setSelectedProvider(providerId)
+    setAiConfig({
+      ...aiConfig,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.defaultApiKey,
+      model: provider.defaultModel,
+    })
+    setAiModels([]) // Clear models when provider changes
+    setModelsError(null)
+  }
+
   const handleSaveAI = () => {
     saveAIConfig(aiConfig)
     setAiSaved(true)
     setTimeout(() => setAiSaved(false), 2000)
+  }
+
+  const handleLoadModels = async () => {
+    if (!aiConfig.apiKey) {
+      setModelsError('Please enter API key first')
+      return
+    }
+    
+    const isOpenRouter = aiConfig.baseUrl.includes('openrouter.ai')
+    if (!isOpenRouter) {
+      setModelsError('Model fetching only works with OpenRouter. For LM Studio, manually enter model names from the Models panel.')
+      return
+    }
+
+    setLoadingModels(true)
+    setModelsError(null)
+    try {
+      const models = await fetchOpenRouterModels(aiConfig.apiKey)
+      if (models.length === 0) {
+        setModelsError('No models found. Check your API key.')
+      } else {
+        setAiModels(models)
+      }
+    } catch (err) {
+      setModelsError(err instanceof Error ? err.message : 'Failed to fetch models')
+    } finally {
+      setLoadingModels(false)
+    }
   }
 
   const handleTestAI = async () => {
@@ -178,15 +225,39 @@ export function SettingsPage() {
           </div>
 
           <div className="space-y-2">
+            <Label>AI Provider</Label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {AI_PROVIDERS.map((provider) => (
+                <button
+                  key={provider.id}
+                  onClick={() => handleSelectProvider(provider.id)}
+                  className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all ${
+                    selectedProvider === provider.id || aiConfig.baseUrl === provider.baseUrl
+                      ? 'border-primary bg-primary/10 text-primary font-medium'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                  title={provider.description}
+                >
+                  <span className="text-sm">{provider.name}</span>
+                  <span className="text-xs text-muted-foreground mt-0.5 opacity-70">{provider.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <Label>Base URL</Label>
             <Input
               placeholder="http://localhost:1234/v1"
               value={aiConfig.baseUrl}
-              onChange={(e) => setAiConfig({ ...aiConfig, baseUrl: e.target.value })}
+              onChange={(e) => {
+                setAiConfig({ ...aiConfig, baseUrl: e.target.value })
+                setSelectedProvider('') // Clear provider selection when manually edited
+              }}
               className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              LM Studio: <code>http://localhost:1234/v1</code> | OpenRouter: <code>https://openrouter.ai/api/v1</code>
+              Custom base URL or use provider presets above
             </p>
           </div>
 
@@ -211,13 +282,59 @@ export function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Model</Label>
-            <Input
-              placeholder="e.g. gpt-4o-mini or local-model"
-              value={aiConfig.model}
-              onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">OpenRouter models: <code>openai/gpt-4o-mini</code>, <code>anthropic/claude-3-haiku</code>. LM Studio: the name shown in the Models panel.</p>
+            <div className="flex items-center justify-between">
+              <Label>Model</Label>
+              {aiConfig.baseUrl.includes('openrouter.ai') && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleLoadModels}
+                  disabled={loadingModels || !aiConfig.apiKey}
+                  className="text-xs h-6 gap-1"
+                >
+                  {loadingModels ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  Load Models
+                </Button>
+              )}
+            </div>
+            
+            {aiModels.length > 0 ? (
+              <Select
+                value={aiConfig.model}
+                onChange={(value) => setAiConfig({ ...aiConfig, model: value })}
+              >
+                <option value="">Select a model...</option>
+                {aiModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                placeholder="e.g. gpt-4o-mini or local-model"
+                value={aiConfig.model}
+                onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+              />
+            )}
+            
+            {modelsError && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">{modelsError}</p>
+            )}
+            
+            {aiModels.length > 0 && (
+              <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded p-2">
+                ✓ {aiModels.length} models available
+              </p>
+            )}
+            
+            <p className="text-xs text-muted-foreground">
+              OpenRouter: Click "Load Models" to see available models. LM Studio: manually enter model names from the Models panel.
+            </p>
           </div>
 
           {aiTestResult && (
