@@ -1,4 +1,4 @@
-# Conversational Onboarding Flow Builder
+# WorkFlow Studio
 
 A client-side React application for building custom onboarding flows with a conversational chat interface. Admins can create question flows, map them to database columns, and generate SQL INSERT statements from customer responses.
 

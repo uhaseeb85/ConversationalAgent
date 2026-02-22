@@ -64,7 +64,7 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/" className="flex items-center space-x-2">
               <Send className="h-6 w-6 text-primary" />
               <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-                Onboarding Flow Builder
+                WorkFlow Studio
               </span>
             </Link>
 

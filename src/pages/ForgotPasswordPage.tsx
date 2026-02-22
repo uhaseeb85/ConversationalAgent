@@ -37,7 +37,7 @@ export function ForgotPasswordPage() {
           <div className="flex items-center justify-center gap-2 mb-3">
             <Send className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-              Onboarding Flow Builder
+              WorkFlow Studio
             </span>
           </div>
           <h1 className="text-xl font-semibold text-gray-800">Reset your password</h1>

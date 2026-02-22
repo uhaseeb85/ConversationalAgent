@@ -21,7 +21,7 @@ export async function sendPasswordResetEmail(
 ): Promise<void> {
   const appUrl = process.env.APP_URL || 'http://localhost:5173'
   const resetLink = `${appUrl}/reset-password?token=${resetToken}`
-  const from = process.env.SMTP_FROM || 'Onboarding Flow Builder <noreply@example.com>'
+  const from = process.env.SMTP_FROM || 'WorkFlow Studio <noreply@example.com>'
 
   const transport = getTransport()
 
