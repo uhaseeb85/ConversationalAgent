@@ -104,6 +104,7 @@ export interface OnboardingFlow {
   createdAt: Date
   updatedAt: Date
   isActive: boolean
+  isPublic?: boolean // Public flows are visible to all users
   createdBy?: string | null
   schemaContext?: string | null
 }

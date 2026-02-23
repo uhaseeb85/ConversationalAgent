@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '@/lib/store'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -20,6 +21,7 @@ type Tab = 'details' | 'schema' | 'questions' | 'import'
 export function FlowBuilderPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const addFlow = useStore((state) => state.addFlow)
   const updateFlow = useStore((state) => state.updateFlow)
   const flows = useStore((state) => state.flows)
@@ -74,6 +76,13 @@ export function FlowBuilderPage() {
     if (id) {
       const flow = flows.find((f) => f.id === id)
       if (flow) {
+        // Check if user can edit this flow
+        if (user && user.role !== 'admin' && flow.createdBy !== user.id) {
+          alert('You do not have permission to edit this flow')
+          navigate('/')
+          return
+        }
+        
         setName(flow.name)
         setDescription(flow.description)
         setWelcomeMessage(flow.welcomeMessage || '')
@@ -85,7 +94,7 @@ export function FlowBuilderPage() {
         setUserDefinedTables(flow.userDefinedTables || [])
       }
     }
-  }, [id, flows])
+  }, [id, flows, user, navigate])
 
   const validateFlowData = (): boolean => {
     if (!name.trim() || questions.length === 0) {

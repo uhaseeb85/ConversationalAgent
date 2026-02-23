@@ -6,6 +6,7 @@ import { RegisterPage } from './pages/RegisterPage'
 import { AdminPage } from './pages/AdminPage'
 import { HomePage } from './pages/HomePage'
 import { FlowBuilderPage } from './pages/FlowBuilderPage'
+import { AIFlowBuilderPage } from './pages/AIFlowBuilderPage'
 import { OnboardPage } from './pages/OnboardPage'
 import { SubmissionsPage } from './pages/SubmissionsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -61,6 +62,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/flows/new" element={<FlowBuilderPage />} />
             <Route path="/flows/:id/edit" element={<FlowBuilderPage />} />
+            <Route path="/ai-flow-builder" element={<AIFlowBuilderPage />} />
             <Route path="/onboard/:flowId" element={<OnboardPage />} />
             <Route path="/submissions" element={<SubmissionsPage />} />
             <Route path="/submissions/:id" element={<SubmissionsPage />} />

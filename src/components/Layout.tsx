@@ -1,7 +1,7 @@
 import { ReactNode, useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Home, FileText, Send, Settings, PlusCircle, ShieldCheck, LogOut, ChevronDown, User } from 'lucide-react'
+import { Home, FileText, Send, Settings, PlusCircle, ShieldCheck, LogOut, ChevronDown, User, Sparkles } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface LayoutProps {
@@ -40,6 +40,7 @@ export function Layout({ children }: LayoutProps) {
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/flows/new', label: 'Create Flow', icon: PlusCircle },
+    { path: '/ai-flow-builder', label: 'AI Flow Builder', icon: Sparkles },
     { path: '/submissions', label: 'Submissions', icon: FileText },
     { path: '/settings', label: 'Settings', icon: Settings },
     ...(user?.role === 'admin'

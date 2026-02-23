@@ -231,7 +231,7 @@ export async function chatCompletion(
       model: cfg.model,
       messages,
       stream: false,
-      max_tokens: 256,
+      max_tokens: 2000,
       temperature: 0.3,
     }),
   })

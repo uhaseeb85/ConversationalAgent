@@ -13,7 +13,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const rows = isAdmin
       ? await query<FlowRow>('SELECT * FROM flows ORDER BY created_at DESC')
       : await query<FlowRow>(
-          'SELECT * FROM flows WHERE created_by = $1 ORDER BY created_at DESC',
+          'SELECT * FROM flows WHERE (created_by = $1 OR is_public = 1) ORDER BY created_at DESC',
           [req.user!.id]
         )
     res.json({ flows: rows.map(formatFlow) })
@@ -39,15 +39,15 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 // ─── Create ────────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, tableName, welcomeMessage, completionMessage, isActive, questions, sqlOperations, schemaContext } = req.body
+    const { name, description, tableName, welcomeMessage, completionMessage, isActive, isPublic, questions, sqlOperations, schemaContext } = req.body
     const id = crypto.randomBytes(16).toString('hex')
     const now = new Date().toISOString()
     await query(
-      `INSERT INTO flows (id, name, description, table_name, welcome_message, completion_message, is_active, questions, sql_operations, schema_context, created_by, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      `INSERT INTO flows (id, name, description, table_name, welcome_message, completion_message, is_active, is_public, questions, sql_operations, schema_context, created_by, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         id, name, description ?? '', tableName ?? '', welcomeMessage ?? null,
-        completionMessage ?? null, isActive !== false ? 1 : 0,
+        completionMessage ?? null, isActive !== false ? 1 : 0, isPublic === true ? 1 : 0,
         JSON.stringify(questions ?? []), JSON.stringify(sqlOperations ?? []),
         schemaContext ?? null, req.user!.id, now, now,
       ]
@@ -68,15 +68,16 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (req.user!.role !== 'admin' && existing.created_by !== req.user!.id) {
       res.status(403).json({ error: 'Forbidden' }); return
     }
-    const { name, description, tableName, welcomeMessage, completionMessage, isActive, questions, sqlOperations, schemaContext } = req.body
+    const { name, description, tableName, welcomeMessage, completionMessage, isActive, isPublic, questions, sqlOperations, schemaContext } = req.body
     const now = new Date().toISOString()
     await query(
       `UPDATE flows SET name=$1, description=$2, table_name=$3, welcome_message=$4, completion_message=$5,
-       is_active=$6, questions=$7, sql_operations=$8, schema_context=$9, updated_at=$10 WHERE id=$11`,
+       is_active=$6, is_public=$7, questions=$8, sql_operations=$9, schema_context=$10, updated_at=$11 WHERE id=$12`,
       [
         name ?? existing.name, description ?? existing.description, tableName ?? existing.table_name,
         welcomeMessage ?? existing.welcome_message, completionMessage ?? existing.completion_message,
         isActive !== undefined ? (isActive ? 1 : 0) : existing.is_active,
+        isPublic !== undefined ? (isPublic ? 1 : 0) : existing.is_public ?? 0,
         JSON.stringify(questions ?? JSON.parse(existing.questions)),
         JSON.stringify(sqlOperations ?? JSON.parse(existing.sql_operations ?? '[]')),
         schemaContext ?? existing.schema_context, now, req.params.id,
@@ -109,7 +110,8 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 interface FlowRow {
   id: string; name: string; description: string; table_name: string
   welcome_message: string | null; completion_message: string | null
-  is_active: number | boolean; questions: string; sql_operations: string
+  is_active: number | boolean; is_public: number | boolean
+  questions: string; sql_operations: string
   schema_context: string | null; created_by: string | null
   created_at: string; updated_at: string
 }
@@ -118,7 +120,7 @@ function formatFlow(r: FlowRow) {
   return {
     id: r.id, name: r.name, description: r.description, tableName: r.table_name,
     welcomeMessage: r.welcome_message, completionMessage: r.completion_message,
-    isActive: Boolean(r.is_active),
+    isActive: Boolean(r.is_active), isPublic: Boolean(r.is_public),
     questions: JSON.parse(r.questions || '[]'),
     sqlOperations: JSON.parse(r.sql_operations || '[]'),
     schemaContext: r.schema_context,

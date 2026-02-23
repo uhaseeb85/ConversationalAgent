@@ -131,6 +131,7 @@ export async function initSchema(): Promise<void> {
       welcome_message TEXT,
       completion_message TEXT,
       is_active     INTEGER NOT NULL DEFAULT 1,
+      is_public     INTEGER NOT NULL DEFAULT 0,
       questions     TEXT NOT NULL DEFAULT '[]',
       sql_operations TEXT NOT NULL DEFAULT '[]',
       schema_context TEXT,
@@ -139,6 +140,11 @@ export async function initSchema(): Promise<void> {
       updated_at    TEXT NOT NULL DEFAULT (${now})
     )
   `)
+
+  // Migration: add is_public for existing databases
+  try {
+    await query('ALTER TABLE flows ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0')
+  } catch { /* column already exists — safe to ignore */ }
 
   await query(`
     CREATE TABLE IF NOT EXISTS submissions (

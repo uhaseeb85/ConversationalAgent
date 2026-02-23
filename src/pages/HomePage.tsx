@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore, initStore } from '@/lib/store'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText } from 'lucide-react'
+import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText, Globe } from 'lucide-react'
 import { format } from 'date-fns'
+import type { OnboardingFlow } from '@/types'
 
 export function HomePage() {
+  const { user } = useAuth()
   const flows = useStore((state) => state.flows)
   const submissions = useStore((state) => state.submissions)
   const deleteFlow = useStore((state) => state.deleteFlow)
@@ -19,6 +22,11 @@ export function HomePage() {
 
   const getSubmissionCount = (flowId: string) => {
     return submissions.filter((s) => s.flowId === flowId).length
+  }
+
+  const canModifyFlow = (flow: OnboardingFlow) => {
+    if (!user) return false
+    return user.role === 'admin' || flow.createdBy === user.id
   }
 
   const handleDelete = async (flowId: string, flowName: string) => {
@@ -112,23 +120,33 @@ export function HomePage() {
             >
               <CardHeader>
                 <div className="flex items-start justify-between mb-2">
-                  <Badge variant={flow.isActive ? 'success' : 'secondary'}>
-                    {flow.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
-                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Link to={`/flows/${flow.id}/edit`}>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(flow.id, flow.name)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                  <div className="flex gap-2">
+                    <Badge variant={flow.isActive ? 'success' : 'secondary'}>
+                      {flow.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                    {flow.isPublic && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        <Globe className="h-3 w-3 mr-1" />
+                        Public
+                      </Badge>
+                    )}
                   </div>
+                  {canModifyFlow(flow) && (
+                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Link to={`/flows/${flow.id}/edit`}>
+                        <Button variant="ghost" size="sm">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(flow.id, flow.name)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <CardTitle className="text-xl">{flow.name}</CardTitle>
                 <CardDescription className="line-clamp-2">{flow.description}</CardDescription>
