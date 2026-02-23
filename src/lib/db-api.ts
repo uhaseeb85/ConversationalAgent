@@ -61,3 +61,48 @@ export function executeSQL(statements: string[]): Promise<ExecuteResult> {
 export async function getDBStatus(): Promise<{ type: 'postgresql' | 'sqlite' | null }> {
   return request<{ type: 'postgresql' | 'sqlite' | null }>('/status')
 }
+
+// DB Connection Config persistence (localStorage)
+const DB_CONFIG_KEY = 'db_connection'
+
+export function loadDBConfig(): DBConnectionConfig | null {
+  try {
+    const raw = localStorage.getItem(DB_CONFIG_KEY)
+    if (!raw) return null
+    const config = JSON.parse(raw) as DBConnectionConfig
+    return config
+  } catch (error) {
+    console.error('Failed to load DB config:', error)
+    return null
+  }
+}
+
+export function saveDBConfig(config: DBConnectionConfig): void {
+  try {
+    localStorage.setItem(DB_CONFIG_KEY, JSON.stringify(config))
+  } catch (error) {
+    console.error('Failed to save DB config:', error)
+  }
+}
+
+export function clearDBConfig(): void {
+  try {
+    localStorage.removeItem(DB_CONFIG_KEY)
+  } catch (error) {
+    console.error('Failed to clear DB config:', error)
+  }
+}
+
+/**
+ * Returns the demo database configuration
+ * This is a pre-populated SQLite database for demonstration purposes
+ */
+export function getDemoDB(): DBConnectionConfig {
+  // In production, this would be an absolute path or handled server-side
+  // For now, we use a relative path that the backend can resolve
+  return {
+    type: 'sqlite',
+    connectionString: './demo/company-onboarding.db',
+    label: 'Demo: Company Onboarding',
+  }
+}

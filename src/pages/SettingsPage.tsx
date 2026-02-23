@@ -1,19 +1,14 @@
-import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { loadAIConfig, saveAIConfig, chatCompletion, fetchOpenRouterModels, AI_PROVIDERS, type AIModel } from '@/lib/ai-client'
-import { connectDB } from '@/lib/db-api'
-import { Settings, Bot, Database, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, KeyRound, AlertTriangle, RefreshCw } from 'lucide-react'
+import { connectDB, loadDBConfig, saveDBConfig, clearDBConfig, getDemoDB } from '@/lib/db-api'
+import { Settings, Bot, Database, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, RefreshCw, Trash2 } from 'lucide-react'
 
 export function SettingsPage() {
-  const { user, setUser } = useAuth()
-  const location = useLocation()
-  const forcedChange = !!(location.state as { mustChangePassword?: boolean } | null)?.mustChangePassword
   // AI settings
   const [aiConfig, setAiConfig] = useState(loadAIConfig)
   const [testingAI, setTestingAI] = useState(false)
@@ -25,53 +20,29 @@ export function SettingsPage() {
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string>('')
 
-  // Change password
-  const [cpCurrent, setCpCurrent] = useState('')
-  const [cpNew, setCpNew] = useState('')
-  const [cpConfirm, setCpConfirm] = useState('')
-  const [cpLoading, setCpLoading] = useState(false)
-  const [cpResult, setCpResult] = useState<{ ok: boolean; message: string } | null>(null)
-  const [showCpCurrent, setShowCpCurrent] = useState(false)
-  const [showCpNew, setShowCpNew] = useState(false)
-
-  const handleChangePassword = async () => {
-    setCpResult(null)
-    if (cpNew.length < 8) {
-      setCpResult({ ok: false, message: 'New password must be at least 8 characters' })
-      return
-    }
-    if (cpNew !== cpConfirm) {
-      setCpResult({ ok: false, message: 'New passwords do not match' })
-      return
-    }
-    setCpLoading(true)
-    try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ currentPassword: cpCurrent, newPassword: cpNew }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed')
-      setCpResult({ ok: true, message: 'Password updated successfully!' })
-      setCpCurrent('')
-      setCpNew('')
-      setCpConfirm('')
-      // Clear mustChangePassword flag in local auth context
-      if (user) setUser({ ...user, mustChangePassword: false })
-    } catch (err) {
-      setCpResult({ ok: false, message: err instanceof Error ? err.message : 'Failed' })
-    } finally {
-      setCpLoading(false)
-    }
-  }
-
-  // DB settings (session only)
+  // DB settings (persisted in localStorage)
   const [dbType, setDbType] = useState<'postgresql' | 'sqlite'>('postgresql')
   const [connString, setConnString] = useState('')
   const [testingDB, setTestingDB] = useState(false)
   const [dbTestResult, setDbTestResult] = useState<{ ok: boolean; message: string; tables?: string[] } | null>(null)
+  const [dbConnected, setDbConnected] = useState(false)
+  const [autoConnectDemo, setAutoConnectDemo] = useState(false)
+
+  // Load DB config from localStorage on mount, or auto-load demo database
+  useEffect(() => {
+    const savedConfig = loadDBConfig()
+    if (savedConfig) {
+      setDbType(savedConfig.type)
+      setConnString(savedConfig.connectionString)
+      setDbConnected(true)
+    } else {
+      // Auto-load demo database if no saved configuration
+      const demoConfig = getDemoDB()
+      setDbType(demoConfig.type)
+      setConnString(demoConfig.connectionString)
+      setAutoConnectDemo(true)
+    }
+  }, [])
 
   const handleSelectProvider = (providerId: string) => {
     const provider = AI_PROVIDERS.find((p) => p.id === providerId)
@@ -152,44 +123,46 @@ export function SettingsPage() {
           message: `Connected! Found ${result.tables?.length ?? 0} tables.`,
           tables: result.tables,
         })
-        // Persist session connection config (no password goes to localStorage)
-        sessionStorage.setItem(
-          'db_connection',
-          JSON.stringify({ type: dbType, connectionString: connString, label: `${dbType} connection` })
-        )
+        // Persist connection config to localStorage
+        saveDBConfig({
+          type: dbType,
+          connectionString: connString,
+          label: `${dbType} connection`,
+        })
+        setDbConnected(true)
       } else {
         setDbTestResult({ ok: false, message: result.error ?? 'Connection failed' })
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Server not reachable. Make sure backend is running (npm run dev).'
       setDbTestResult({
         ok: false,
-        message: 'Server not reachable. Make sure backend is running (npm run dev).',
+        message: errorMsg,
       })
     } finally {
       setTestingDB(false)
     }
   }
 
+  // Auto-connect to demo database if flagged
+  useEffect(() => {
+    if (autoConnectDemo && connString) {
+      setAutoConnectDemo(false)
+      setTimeout(() => {
+        handleTestDB()
+      }, 500)
+    }
+  }, [autoConnectDemo, connString])
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent flex items-center gap-3">
           <Settings className="h-9 w-9 text-indigo-600" />
-          Settings
+          App Settings
         </h1>
         <p className="text-muted-foreground">Configure AI and database connections for your flows.</p>
       </div>
-
-      {/* Temp-password notice */}
-      {forcedChange && (
-        <div className="flex items-start gap-3 mb-6 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl px-4 py-3 text-sm">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-amber-500" />
-          <div>
-            <p className="font-semibold">Temporary password in use</p>
-            <p className="text-xs mt-0.5">An admin has set a temporary password for your account. Please choose a new password below before continuing.</p>
-          </div>
-        </div>
-      )}
 
       {/* ─── AI Configuration ────────────────────────────────── */}
       <Card className="mb-6">
@@ -305,7 +278,7 @@ export function SettingsPage() {
             {aiModels.length > 0 ? (
               <Select
                 value={aiConfig.model}
-                onChange={(value) => setAiConfig({ ...aiConfig, model: value })}
+                onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
               >
                 <option value="">Select a model...</option>
                 {aiModels.map((model) => (
@@ -356,92 +329,6 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ─── Change Password ────────────────────────────────── */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" />
-            Change Password
-          </CardTitle>
-          <CardDescription>Update your account password. You'll need to enter your current password to confirm.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cp-current">Current password</Label>
-            <div className="relative">
-              <Input
-                id="cp-current"
-                type={showCpCurrent ? 'text' : 'password'}
-                placeholder="Current password"
-                value={cpCurrent}
-                onChange={(e) => setCpCurrent(e.target.value)}
-                className="pr-10"
-              />
-              <button
-                onClick={() => setShowCpCurrent(!showCpCurrent)}
-                className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
-                type="button"
-              >
-                {showCpCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cp-new">New password</Label>
-            <div className="relative">
-              <Input
-                id="cp-new"
-                type={showCpNew ? 'text' : 'password'}
-                placeholder="At least 8 characters"
-                value={cpNew}
-                onChange={(e) => setCpNew(e.target.value)}
-                className="pr-10"
-              />
-              <button
-                onClick={() => setShowCpNew(!showCpNew)}
-                className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground"
-                type="button"
-              >
-                {showCpNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cp-confirm">Confirm new password</Label>
-            <Input
-              id="cp-confirm"
-              type="password"
-              placeholder="Repeat new password"
-              value={cpConfirm}
-              onChange={(e) => setCpConfirm(e.target.value)}
-            />
-          </div>
-
-          {cpResult && (
-            <div className={`flex items-start gap-2 text-sm rounded-lg p-3 ${
-              cpResult.ok
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-red-50 text-red-600 border border-red-200'
-            }`}>
-              {cpResult.ok
-                ? <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                : <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />}
-              <span>{cpResult.message}</span>
-            </div>
-          )}
-
-          <Button
-            onClick={handleChangePassword}
-            disabled={cpLoading || !cpCurrent || !cpNew || !cpConfirm}
-          >
-            {cpLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <KeyRound className="h-4 w-4 mr-2" />}
-            Update password
-          </Button>
-        </CardContent>
-      </Card>
-
       {/* ─── Database Connection ───────────────────────────── */}
       <Card>
         <CardHeader>
@@ -450,14 +337,25 @@ export function SettingsPage() {
             Database Connection
           </CardTitle>
           <CardDescription>
-            Connect to a database to enable live schema import and SQL execution. Connection is stored in session memory only — passwords are cleared when the browser tab closes.
+            Connect to a database to enable live schema import and SQL execution. Your connection is saved in browser storage and will persist across sessions.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {dbConnected && (
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <p className="text-sm text-emerald-800 font-medium">Connection saved and will be restored on next visit</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Database Type</Label>
-              <Select value={dbType} onChange={(e) => setDbType(e.target.value as 'postgresql' | 'sqlite')}>
+              <Select value={dbType} onChange={(e) => {
+                setDbType(e.target.value as 'postgresql' | 'sqlite')
+                setDbConnected(false)
+                setDbTestResult(null)
+              }}>
                 <option value="postgresql">PostgreSQL</option>
                 <option value="sqlite">SQLite</option>
               </Select>
@@ -471,16 +369,50 @@ export function SettingsPage() {
                     : 'postgresql://user:password@localhost:5432/mydb'
                 }
                 value={connString}
-                onChange={(e) => setConnString(e.target.value)}
+                onChange={(e) => {
+                  setConnString(e.target.value)
+                  setDbConnected(false)
+                  setDbTestResult(null)
+                }}
                 className="font-mono text-sm"
               />
             </div>
           </div>
 
-          <Button onClick={handleTestDB} disabled={testingDB || !connString.trim()}>
-            {testingDB ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-            Connect & Test
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleTestDB} disabled={testingDB || !connString.trim()}>
+              {testingDB ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+              Connect & Test
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const demoConfig = getDemoDB()
+                setDbType(demoConfig.type)
+                setConnString(demoConfig.connectionString)
+                setDbConnected(false)
+                setDbTestResult(null)
+              }}
+            >
+              Load Demo Database
+            </Button>
+            {dbConnected && (
+              <Button
+                onClick={() => {
+                  clearDBConfig()
+                  setDbConnected(false)
+                  setDbTestResult(null)
+                  setConnString('')
+                  setDbType('postgresql')
+                }}
+                variant="outline"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Connection
+              </Button>
+            )}
+          </div>
 
           {dbTestResult && (
             <div className={`text-sm rounded-lg p-3 ${dbTestResult.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
@@ -502,7 +434,7 @@ export function SettingsPage() {
           )}
 
           <p className="text-xs text-muted-foreground pt-1">
-            The local backend server (<code>npm run dev</code>) proxies these connections. Your credentials are not stored in the browser beyond this session.
+            Connection settings are securely stored in your browser's local storage. The backend proxies these connections for live schema import and SQL execution. Passwords are stored locally only for convenience; never share your browser data with others.
           </p>
         </CardContent>
       </Card>

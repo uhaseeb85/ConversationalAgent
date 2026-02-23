@@ -9,11 +9,13 @@ import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { QuestionBuilder } from '@/components/QuestionBuilder'
 import { SchemaImporter } from '@/components/SchemaImporter'
-import { Question, SQLOperation, SQLOperationType, ColumnMapping, SQLCondition } from '@/types'
+import { TableSchemaBuilder } from '@/components/TableSchemaBuilder'
+import { Question, SQLOperation, UserDefinedTable, SchemaTable } from '@/types'
 import { generateId } from '@/lib/utils'
-import { Save, ArrowLeft, Database, HelpCircle, PlaySquare, Plus, Trash2, ChevronDown, ChevronRight, Import } from 'lucide-react'
+import { Save, ArrowLeft, Database, HelpCircle, Import, CheckCircle2, RefreshCw, AlertCircle, Loader2 } from 'lucide-react'
+import { loadDBConfig, getSchema, connectDB, saveDBConfig, clearDBConfig } from '@/lib/db-api'
 
-type Tab = 'details' | 'schema' | 'questions' | 'import' | 'simulator'
+type Tab = 'details' | 'schema' | 'questions' | 'import'
 
 export function FlowBuilderPage() {
   const { id } = useParams()
@@ -31,8 +33,43 @@ export function FlowBuilderPage() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [isActive, setIsActive] = useState(true)
   const [sqlOperations, setSqlOperations] = useState<SQLOperation[]>([])
-  const [expandedOperations, setExpandedOperations] = useState<Set<string>>(new Set())
+  const [userDefinedTables, setUserDefinedTables] = useState<UserDefinedTable[]>([])
+  
+  // Live database connection state
+  const [liveDatabaseTables, setLiveDatabaseTables] = useState<SchemaTable[]>([])
+  const [loadingLiveTables, setLoadingLiveTables] = useState(false)
+  const [dbConnectionName, setDbConnectionName] = useState<string | null>(null)
+  
+  // Database connection form state
+  const [dbType, setDbType] = useState<'postgresql' | 'sqlite'>('postgresql')
+  const [connString, setConnString] = useState('')
+  const [connecting, setConnecting] = useState(false)
+  const [connError, setConnError] = useState('')
 
+  // Load live database tables on mount
+  useEffect(() => {
+    const loadLiveDatabaseSchema = async () => {
+      const savedConfig = loadDBConfig()
+      if (!savedConfig) return
+
+      setLoadingLiveTables(true)
+      setDbConnectionName(savedConfig.label || `${savedConfig.type} database`)
+      try {
+        const result = await getSchema()
+        if (result.ok && result.tables) {
+          setLiveDatabaseTables(result.tables)
+        }
+      } catch (error) {
+        console.error('Failed to load live database schema:', error)
+      } finally {
+        setLoadingLiveTables(false)
+      }
+    }
+
+    loadLiveDatabaseSchema()
+  }, [])
+
+  // Load flow data
   useEffect(() => {
     if (id) {
       const flow = flows.find((f) => f.id === id)
@@ -45,29 +82,22 @@ export function FlowBuilderPage() {
         setQuestions(flow.questions)
         setIsActive(flow.isActive)
         setSqlOperations(flow.sqlOperations || [])
+        setUserDefinedTables(flow.userDefinedTables || [])
       }
     }
   }, [id, flows])
 
-  const handleSave = async () => {
+  const validateFlowData = (): boolean => {
     if (!name.trim() || questions.length === 0) {
       alert('Please fill in all required fields and add at least one question')
-      return
+      return false
     }
 
-    // Validate SQL operations
-    if (sqlOperations.length > 0) {
-      for (const op of sqlOperations) {
-        if (!op.tableName.trim()) {
-          alert('All SQL operations must have a table name')
-          return
-        }
-        if (op.columnMappings.length === 0 && op.operationType !== 'DELETE') {
-          alert(`SQL operation on ${op.tableName} must have at least one column mapping`)
-          return
-        }
-      }
-    }
+    return true
+  }
+
+  const handleSave = () => {
+    if (!validateFlowData()) return
 
     const flowData = {
       id: id || generateId(),
@@ -77,6 +107,7 @@ export function FlowBuilderPage() {
       completionMessage: completionMessage.trim() || undefined,
       tableName: tableName.trim() || (sqlOperations.length > 0 ? sqlOperations[0].tableName : 'DEFAULT_TABLE'),
       sqlOperations: sqlOperations.length > 0 ? sqlOperations : undefined,
+      userDefinedTables: userDefinedTables.length > 0 ? userDefinedTables : undefined,
       questions,
       createdAt: id ? flows.find((f) => f.id === id)!.createdAt : new Date(),
       updatedAt: new Date(),
@@ -84,112 +115,15 @@ export function FlowBuilderPage() {
     }
 
     if (id) {
-      await updateFlow(id, flowData)
+      updateFlow(id, flowData)
     } else {
-      await addFlow(flowData)
+      addFlow(flowData)
     }
 
     navigate('/')
   }
 
-  const handleAddSQLOperation = () => {
-    const newOperation: SQLOperation = {
-      id: generateId(),
-      operationType: 'INSERT',
-      tableName: '',
-      label: '',
-      columnMappings: [],
-      conditions: [],
-      order: sqlOperations.length,
-    }
-    setSqlOperations([...sqlOperations, newOperation])
-    setExpandedOperations(new Set([...expandedOperations, newOperation.id]))
-  }
 
-  const handleUpdateSQLOperation = (opId: string, updates: Partial<SQLOperation>) => {
-    setSqlOperations(sqlOperations.map(op => op.id === opId ? { ...op, ...updates } : op))
-  }
-
-  const handleDeleteSQLOperation = (opId: string) => {
-    setSqlOperations(sqlOperations.filter(op => op.id !== opId))
-    const newExpanded = new Set(expandedOperations)
-    newExpanded.delete(opId)
-    setExpandedOperations(newExpanded)
-  }
-
-  const toggleOperationExpanded = (opId: string) => {
-    const newExpanded = new Set(expandedOperations)
-    if (newExpanded.has(opId)) {
-      newExpanded.delete(opId)
-    } else {
-      newExpanded.add(opId)
-    }
-    setExpandedOperations(newExpanded)
-  }
-
-  const handleAddColumnMapping = (opId: string) => {
-    const operation = sqlOperations.find(op => op.id === opId)
-    if (operation) {
-      const newMapping: ColumnMapping = {
-        id: generateId(),
-        questionId: questions[0]?.id || '',
-        columnName: '',
-      }
-      handleUpdateSQLOperation(opId, {
-        columnMappings: [...operation.columnMappings, newMapping]
-      })
-    }
-  }
-
-  const handleUpdateColumnMapping = (opId: string, index: number, updates: Partial<ColumnMapping>) => {
-    const operation = sqlOperations.find(op => op.id === opId)
-    if (operation) {
-      const newMappings = [...operation.columnMappings]
-      newMappings[index] = { ...newMappings[index], ...updates }
-      handleUpdateSQLOperation(opId, { columnMappings: newMappings })
-    }
-  }
-
-  const handleDeleteColumnMapping = (opId: string, index: number) => {
-    const operation = sqlOperations.find(op => op.id === opId)
-    if (operation) {
-      const newMappings = operation.columnMappings.filter((_, i) => i !== index)
-      handleUpdateSQLOperation(opId, { columnMappings: newMappings })
-    }
-  }
-
-  const handleAddCondition = (opId: string) => {
-    const operation = sqlOperations.find(op => op.id === opId)
-    if (operation) {
-      const newCondition: SQLCondition = {
-        id: generateId(),
-        columnName: '',
-        operator: 'equals',
-        value: '',
-        valueType: 'static',
-      }
-      handleUpdateSQLOperation(opId, {
-        conditions: [...operation.conditions, newCondition]
-      })
-    }
-  }
-
-  const handleUpdateCondition = (opId: string, index: number, updates: Partial<SQLCondition>) => {
-    const operation = sqlOperations.find(op => op.id === opId)
-    if (operation) {
-      const newConditions = [...operation.conditions]
-      newConditions[index] = { ...newConditions[index], ...updates }
-      handleUpdateSQLOperation(opId, { conditions: newConditions })
-    }
-  }
-
-  const handleDeleteCondition = (opId: string, index: number) => {
-    const operation = sqlOperations.find(op => op.id === opId)
-    if (operation) {
-      const newConditions = operation.conditions.filter((_, i) => i !== index)
-      handleUpdateSQLOperation(opId, { conditions: newConditions })
-    }
-  }
 
   const handleAddQuestion = (question: Question) => {
     setQuestions([...questions, question])
@@ -248,7 +182,7 @@ export function FlowBuilderPage() {
             }`}
           >
             <Database className="h-4 w-4 inline-block mr-1" />
-            SQL Operations & Schema
+            Database Schema
           </button>
           <button
             onClick={() => setActiveTab('questions')}
@@ -270,18 +204,7 @@ export function FlowBuilderPage() {
             }`}
           >
             <Import className="h-4 w-4 inline-block mr-1" />
-            Import Schema
-          </button>
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'simulator'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-            }`}
-          >
-            <PlaySquare className="h-4 w-4 inline-block mr-1" />
-            SQL Simulator
+            Import from DDL
           </button>
         </nav>
       </div>
@@ -362,290 +285,227 @@ export function FlowBuilderPage() {
 
       {activeTab === 'schema' && (
         <div className="space-y-6">
+          {/* Database Connection Form */}
+          {!dbConnectionName && (
+            <Card className="border-blue-200 bg-blue-50/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-blue-600" />
+                  Connect to Live Database
+                </CardTitle>
+                <CardDescription>
+                  Connect to a running database to automatically load table schemas. Requires the local server to be running.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Database Type</Label>
+                    <Select value={dbType} onChange={(e) => setDbType(e.target.value as 'postgresql' | 'sqlite')}>
+                      <option value="postgresql">PostgreSQL</option>
+                      <option value="sqlite">SQLite</option>
+                    </Select>
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label>
+                      {dbType === 'sqlite' ? 'File Path' : 'Connection String'}
+                    </Label>
+                    <Input
+                      placeholder={
+                        dbType === 'sqlite'
+                          ? './demo/company-onboarding.db'
+                          : 'postgresql://user:password@localhost:5432/mydb'
+                      }
+                      value={connString}
+                      onChange={(e) => setConnString(e.target.value)}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={async () => {
+                    setConnecting(true)
+                    setConnError('')
+                    try {
+                      const result = await connectDB({ type: dbType, connectionString: connString })
+                      if (result.ok && result.tables) {
+                        // Save connection config
+                        const label = `${dbType} database`
+                        saveDBConfig({ type: dbType, connectionString: connString, label })
+                        setDbConnectionName(label)
+                        
+                        // Load schema
+                        const schemaResult = await getSchema()
+                        if (schemaResult.ok && schemaResult.tables) {
+                          setLiveDatabaseTables(schemaResult.tables)
+                        }
+                      } else {
+                        setConnError(result.error ?? 'Connection failed')
+                      }
+                    } catch (err) {
+                      setConnError(err instanceof Error ? err.message : 'Failed to connect — is the server running?')
+                    } finally {
+                      setConnecting(false)
+                    }
+                  }}
+                  disabled={connecting || !connString.trim()}
+                >
+                  {connecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+                  {connecting ? 'Connecting...' : 'Connect & Load Schema'}
+                </Button>
+
+                {connError && (
+                  <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <span>{connError}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Live Database Tables */}
+          {dbConnectionName && (
+            <Card className="border-green-200 bg-green-50/50">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      Live Database Connection
+                    </CardTitle>
+                    <CardDescription className="mt-1.5">
+                      Connected to <strong>{dbConnectionName}</strong>. These tables are available for SQL Operations (next tab).
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      clearDBConfig()
+                      setDbConnectionName(null)
+                      setLiveDatabaseTables([])
+                      setConnString('')
+                    }}
+                    className="text-red-600 hover:text-red-700 hover:border-red-300"
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingLiveTables ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                    Loading database schema...
+                  </div>
+                ) : liveDatabaseTables.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Database className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                    <p className="text-sm">No tables found in connected database</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm font-medium">
+                        Found {liveDatabaseTables.length} table{liveDatabaseTables.length !== 1 ? 's' : ''}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          setLoadingLiveTables(true)
+                          try {
+                            const result = await getSchema()
+                            if (result.ok && result.tables) {
+                              setLiveDatabaseTables(result.tables)
+                            }
+                          } catch (error) {
+                            console.error('Failed to reload schema:', error)
+                          } finally {
+                            setLoadingLiveTables(false)
+                          }
+                        }}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Refresh
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {liveDatabaseTables.map((table) => (
+                        <div
+                          key={table.name}
+                          className="border border-green-300 rounded-lg p-4 bg-white hover:shadow-sm transition-shadow"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-mono font-semibold text-sm text-green-700">
+                              {table.name}
+                            </h4>
+                            <span className="text-xs text-muted-foreground">
+                              {table.columns.length} column{table.columns.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {table.columns.slice(0, 5).map((col) => (
+                              <div
+                                key={col.name}
+                                className="text-xs text-muted-foreground font-mono flex items-center gap-2"
+                              >
+                                <span className="text-green-600">•</span>
+                                <span className="font-medium">{col.name}</span>
+                                <span className="text-gray-400">({col.dataType})</span>
+                                {col.isPrimaryKey && (
+                                  <span className="text-blue-600 text-[10px] uppercase">PK</span>
+                                )}
+                              </div>
+                            ))}
+                            {table.columns.length > 5 && (
+                              <div className="text-xs text-muted-foreground italic">
+                                + {table.columns.length - 5} more column{table.columns.length - 5 !== 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-xs text-blue-800">
+                        <strong>💡 Tip:</strong> These tables are ready to use in the <strong>SQL Operations</strong> tab. Table and column names will autocomplete when creating INSERT, UPDATE, or DELETE operations.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* User-Defined Table Schemas */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-primary" />
-                SQL Operations
+                <Database className="h-5 w-5 text-blue-600" />
+                Custom Table Schemas
               </CardTitle>
               <CardDescription>
-                Define INSERT, UPDATE, or DELETE operations. Map questions to table columns and add WHERE conditions for UPDATE/DELETE.
+                Define custom table structures manually. Useful when you don't have a live database connection or need to plan schemas before implementation.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {sqlOperations.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
-                  <Database className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-20" />
-                  <p className="text-sm text-muted-foreground mb-4">No SQL operations defined yet</p>
-                  <Button onClick={handleAddSQLOperation} variant="outline">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add SQL Operation
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {sqlOperations.map((operation) => {
-                    const isExpanded = expandedOperations.has(operation.id)
-                    return (
-                      <div key={operation.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                        {/* Operation Header */}
-                        <div className="bg-gray-50 p-4">
-                          <div className="grid grid-cols-12 gap-4 items-start">
-                            <div className="col-span-1 flex items-center justify-center pt-2">
-                              <button
-                                onClick={() => toggleOperationExpanded(operation.id)}
-                                className="text-muted-foreground hover:text-foreground"
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="h-5 w-5" />
-                                ) : (
-                                  <ChevronRight className="h-5 w-5" />
-                                )}
-                              </button>
-                            </div>
-                            <div className="col-span-3 space-y-2">
-                              <Label className="text-xs text-muted-foreground">Operation Type</Label>
-                              <Select
-                                value={operation.operationType}
-                                onChange={(e) =>
-                                  handleUpdateSQLOperation(operation.id, {
-                                    operationType: e.target.value as SQLOperationType,
-                                  })
-                                }
-                              >
-                                <option value="INSERT">INSERT</option>
-                                <option value="UPDATE">UPDATE</option>
-                                <option value="DELETE">DELETE</option>
-                              </Select>
-                            </div>
-                            <div className="col-span-4 space-y-2">
-                              <Label className="text-xs text-muted-foreground">Table Name *</Label>
-                              <Input
-                                placeholder="e.g., SERVICE_ACCESS"
-                                value={operation.tableName}
-                                onChange={(e) =>
-                                  handleUpdateSQLOperation(operation.id, { tableName: e.target.value })
-                                }
-                                className="uppercase"
-                              />
-                            </div>
-                            <div className="col-span-3 space-y-2">
-                              <Label className="text-xs text-muted-foreground">Label (optional)</Label>
-                              <Input
-                                placeholder="e.g., Create account"
-                                value={operation.label || ''}
-                                onChange={(e) =>
-                                  handleUpdateSQLOperation(operation.id, { label: e.target.value })
-                                }
-                              />
-                            </div>
-                            <div className="col-span-1 flex items-center justify-center pt-7">
-                              <button
-                                onClick={() => handleDeleteSQLOperation(operation.id)}
-                                className="text-muted-foreground hover:text-red-600"
-                              >
-                                <Trash2 className="h-5 w-5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Expanded Content */}
-                        {isExpanded && (
-                          <div className="p-6 space-y-6 bg-white">
-                            {/* Column Mappings (for INSERT and UPDATE) */}
-                            {operation.operationType !== 'DELETE' && (
-                              <div>
-                                <div className="flex items-center justify-between mb-3">
-                                  <Label className="text-sm font-semibold">Column Mappings</Label>
-                                  <Button
-                                    onClick={() => handleAddColumnMapping(operation.id)}
-                                    variant="outline"
-                                    size="sm"
-                                  >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Add Mapping
-                                  </Button>
-                                </div>
-                                {operation.columnMappings.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    No column mappings defined. Add at least one mapping.
-                                  </p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {operation.columnMappings.map((mapping, mappingIdx) => (
-                                      <div
-                                        key={mapping.id || mappingIdx}
-                                        className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded"
-                                      >
-                                        <div className="col-span-5">
-                                          <Select
-                                            value={mapping.questionId}
-                                            onChange={(e) =>
-                                              handleUpdateColumnMapping(operation.id, mappingIdx, {
-                                                questionId: e.target.value,
-                                              })
-                                            }
-                                          >
-                                            <option value="">Select Question...</option>
-                                            {questions.map((q) => (
-                                              <option key={q.id} value={q.id}>
-                                                {q.label}
-                                              </option>
-                                            ))}
-                                          </Select>
-                                        </div>
-                                        <div className="col-span-1 text-center text-muted-foreground">→</div>
-                                        <div className="col-span-5">
-                                          <Input
-                                            placeholder="COLUMN_NAME"
-                                            value={mapping.columnName}
-                                            onChange={(e) =>
-                                              handleUpdateColumnMapping(operation.id, mappingIdx, {
-                                                columnName: e.target.value,
-                                              })
-                                            }
-                                            className="uppercase"
-                                          />
-                                        </div>
-                                        <div className="col-span-1 flex justify-center">
-                                          <button
-                                            onClick={() => handleDeleteColumnMapping(operation.id, mappingIdx)}
-                                            className="text-muted-foreground hover:text-red-600"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* WHERE Conditions (for UPDATE and DELETE) */}
-                            {(operation.operationType === 'UPDATE' || operation.operationType === 'DELETE') && (
-                              <div>
-                                <div className="flex items-center justify-between mb-3">
-                                  <Label className="text-sm font-semibold">
-                                    WHERE Conditions {operation.operationType === 'UPDATE' || operation.operationType === 'DELETE' ? '(Optional)' : ''}
-                                  </Label>
-                                  <Button
-                                    onClick={() => handleAddCondition(operation.id)}
-                                    variant="outline"
-                                    size="sm"
-                                  >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Add Condition
-                                  </Button>
-                                </div>
-                                {operation.conditions.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    No conditions. {operation.operationType} will affect all rows (use with caution).
-                                  </p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {operation.conditions.map((condition, condIdx) => (
-                                      <div
-                                        key={condition.id || condIdx}
-                                        className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded"
-                                      >
-                                        <div className="col-span-3">
-                                          <Input
-                                            placeholder="COLUMN_NAME"
-                                            value={condition.columnName}
-                                            onChange={(e) =>
-                                              handleUpdateCondition(operation.id, condIdx, {
-                                                columnName: e.target.value,
-                                              })
-                                            }
-                                            className="uppercase"
-                                          />
-                                        </div>
-                                        <div className="col-span-2">
-                                          <Select
-                                            value={condition.operator}
-                                            onChange={(e) =>
-                                              handleUpdateCondition(operation.id, condIdx, {
-                                                operator: e.target.value as any,
-                                              })
-                                            }
-                                          >
-                                            <option value="equals">=</option>
-                                            <option value="not-equals">!=</option>
-                                            <option value="greater-than">&gt;</option>
-                                            <option value="less-than">&lt;</option>
-                                            <option value="like">LIKE</option>
-                                            <option value="in">IN</option>
-                                          </Select>
-                                        </div>
-                                        <div className="col-span-2">
-                                          <Select
-                                            value={condition.valueType}
-                                            onChange={(e) =>
-                                              handleUpdateCondition(operation.id, condIdx, {
-                                                valueType: e.target.value as 'static' | 'question',
-                                              })
-                                            }
-                                          >
-                                            <option value="static">Static</option>
-                                            <option value="question">Question</option>
-                                          </Select>
-                                        </div>
-                                        <div className="col-span-4">
-                                          {condition.valueType === 'question' ? (
-                                            <Select
-                                              value={condition.value}
-                                              onChange={(e) =>
-                                                handleUpdateCondition(operation.id, condIdx, {
-                                                  value: e.target.value,
-                                                })
-                                              }
-                                            >
-                                              <option value="">Select Question...</option>
-                                              {questions.map((q) => (
-                                                <option key={q.id} value={`\${${q.id}}`}>
-                                                  {q.label}
-                                                </option>
-                                              ))}
-                                            </Select>
-                                          ) : (
-                                            <Input
-                                              placeholder="Value"
-                                              value={condition.value}
-                                              onChange={(e) =>
-                                                handleUpdateCondition(operation.id, condIdx, {
-                                                  value: e.target.value,
-                                                })
-                                              }
-                                            />
-                                          )}
-                                        </div>
-                                        <div className="col-span-1 flex justify-center">
-                                          <button
-                                            onClick={() => handleDeleteCondition(operation.id, condIdx)}
-                                            className="text-muted-foreground hover:text-red-600"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+            <CardContent>
+              <TableSchemaBuilder
+                tables={userDefinedTables}
+                onAddTable={(table) => setUserDefinedTables([...userDefinedTables, table])}
+                onUpdateTable={(tableId, updates) => {
+                  setUserDefinedTables(
+                    userDefinedTables.map((t) =>
+                      t.id === tableId ? { ...t, ...updates } : t
                     )
-                  })}
-                  <Button onClick={handleAddSQLOperation} variant="outline" className="w-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add SQL Operation
-                  </Button>
-                </>
-              )}
+                  )
+                }}
+                onDeleteTable={(tableId) => {
+                  setUserDefinedTables(userDefinedTables.filter((t) => t.id !== tableId))
+                }}
+              />
             </CardContent>
           </Card>
         </div>
@@ -654,6 +514,7 @@ export function FlowBuilderPage() {
       {activeTab === 'questions' && (
         <QuestionBuilder
           questions={questions}
+          userDefinedTables={userDefinedTables}
           onAddQuestion={handleAddQuestion}
           onUpdateQuestion={handleUpdateQuestion}
           onDeleteQuestion={handleDeleteQuestion}
@@ -670,27 +531,6 @@ export function FlowBuilderPage() {
             setActiveTab('questions')
           }}
         />
-      )}
-
-      {activeTab === 'simulator' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PlaySquare className="h-5 w-5 text-primary" />
-              SQL Simulator
-            </CardTitle>
-            <CardDescription>
-              Preview how your SQL statements will execute against the database
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12 text-muted-foreground">
-              <PlaySquare className="h-12 w-12 mx-auto mb-3 opacity-20" />
-              <p className="text-sm">SQL Simulator will be available after the flow is saved</p>
-              <p className="text-xs mt-2">Complete onboarding sessions will generate SQL that you can test here</p>
-            </div>
-          </CardContent>
-        </Card>
       )}
     </div>
   )

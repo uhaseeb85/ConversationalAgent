@@ -11,7 +11,7 @@ const router = Router()
 // Rate limiters for auth endpoints
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
+  max: 100, // 100 attempts per window (increased for development)
   message: 'Too many login attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,

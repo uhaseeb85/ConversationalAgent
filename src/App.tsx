@@ -9,6 +9,7 @@ import { FlowBuilderPage } from './pages/FlowBuilderPage'
 import { OnboardPage } from './pages/OnboardPage'
 import { SubmissionsPage } from './pages/SubmissionsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 
@@ -30,8 +31,8 @@ function PrivateLayout() {
   }
 
   // Force password change if admin set a temporary password
-  if (user.mustChangePassword && location.pathname !== '/settings') {
-    return <Navigate to="/settings" state={{ mustChangePassword: true }} replace />
+  if (user.mustChangePassword && location.pathname !== '/profile') {
+    return <Navigate to="/profile" state={{ mustChangePassword: true }} replace />
   }
 
   return <Layout />
@@ -63,6 +64,7 @@ function App() {
             <Route path="/onboard/:flowId" element={<OnboardPage />} />
             <Route path="/submissions" element={<SubmissionsPage />} />
             <Route path="/submissions/:id" element={<SubmissionsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             {/* Admin-only */}
             <Route element={<AdminRoute />}>

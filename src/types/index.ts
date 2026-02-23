@@ -23,6 +23,27 @@ export interface ValidationRule {
   message?: string
 }
 
+// User-defined column in a table schema
+export interface UserDefinedColumn {
+  id: string
+  name: string
+  dataType: 'text' | 'integer' | 'real' | 'date' | 'datetime' | 'boolean'
+  nullable: boolean
+  isPrimaryKey: boolean
+  defaultValue?: string
+  description?: string
+}
+
+// User-defined table schema
+export interface UserDefinedTable {
+  id: string
+  name: string
+  description?: string
+  columns: UserDefinedColumn[]
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Individual question definition
 export interface Question {
   id: string
@@ -34,6 +55,7 @@ export interface Question {
   required: boolean
   validationRules: ValidationRule[]
   sqlColumnName: string // Maps to database column
+  tableName?: string // Optional: specific table this column belongs to
   conditionalLogic?: ConditionalLogic // Show question based on condition
   order: number
 }
@@ -77,6 +99,7 @@ export interface OnboardingFlow {
   completionMessage?: string
   tableName: string // Legacy: Primary table name (for backward compatibility)
   sqlOperations?: SQLOperation[] // New: Multiple SQL operations support
+  userDefinedTables?: UserDefinedTable[] // New: User-defined table schemas
   questions: Question[]
   createdAt: Date
   updatedAt: Date

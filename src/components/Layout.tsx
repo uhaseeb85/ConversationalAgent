@@ -1,7 +1,7 @@
 import { ReactNode, useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Home, FileText, Send, Settings, PlusCircle, ShieldCheck, LogOut, ChevronDown } from 'lucide-react'
+import { Home, FileText, Send, Settings, PlusCircle, ShieldCheck, LogOut, ChevronDown, User } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface LayoutProps {
@@ -111,12 +111,20 @@ export function Layout({ children }: LayoutProps) {
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                       </div>
                       <Link
+                        to="/profile"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent transition-colors"
+                      >
+                        <User className="h-4 w-4" />
+                        My Profile
+                      </Link>
+                      <Link
                         to="/settings"
                         onClick={() => setDropdownOpen(false)}
                         className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent transition-colors"
                       >
                         <Settings className="h-4 w-4" />
-                        Settings
+                        App Settings
                       </Link>
                       <button
                         onClick={handleLogout}

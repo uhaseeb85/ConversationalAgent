@@ -5,7 +5,7 @@ import { Input } from './ui/Input'
 import { Label } from './ui/Label'
 import { Select } from './ui/Select'
 import { Textarea } from './ui/Textarea'
-import { Question, QuestionType } from '@/types'
+import { Question, QuestionType, UserDefinedTable } from '@/types'
 import { generateId } from '@/lib/utils'
 import { Plus, Trash2, GripVertical, ChevronDown, ChevronUp } from 'lucide-react'
 import {
@@ -27,11 +27,12 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 interface QuestionBuilderProps {
-  questions: Question[]
-  onAddQuestion: (question: Question) => void
-  onUpdateQuestion: (questionId: string, updates: Partial<Question>) => void
-  onDeleteQuestion: (questionId: string) => void
-  onReorderQuestions: (questions: Question[]) => void
+  readonly questions: Question[]
+  readonly userDefinedTables?: UserDefinedTable[]
+  readonly onAddQuestion: (question: Question) => void
+  readonly onUpdateQuestion: (questionId: string, updates: Partial<Question>) => void
+  readonly onDeleteQuestion: (questionId: string) => void
+  readonly onReorderQuestions: (questions: Question[]) => void
 }
 
 const questionTypes: { value: QuestionType; label: string }[] = [
@@ -49,12 +50,14 @@ function SortableQuestionItem({
   question,
   index,
   allQuestions,
+  userDefinedTables,
   onUpdate,
   onDelete,
 }: {
   question: Question
   index: number
   allQuestions: Question[]
+  userDefinedTables?: UserDefinedTable[]
   onUpdate: (questionId: string, updates: Partial<Question>) => void
   onDelete: (questionId: string) => void
 }) {
@@ -68,6 +71,10 @@ function SortableQuestionItem({
     transition,
   }
 
+  const selectedTable = question.tableName && userDefinedTables
+    ? userDefinedTables.find((t) => t.id === question.tableName)
+    : null
+
   return (
     <div ref={setNodeRef} style={style} className="mb-4">
       <div className="border rounded-lg bg-white shadow-sm">
@@ -78,7 +85,8 @@ function SortableQuestionItem({
           <div className="flex-1">
             <div className="font-medium">{question.label || `Question ${index + 1}`}</div>
             <div className="text-sm text-muted-foreground">
-              {questionTypes.find((t) => t.value === question.type)?.label} → {question.sqlColumnName}
+              {questionTypes.find((t) => t.value === question.type)?.label} →{' '}
+              {selectedTable ? `${selectedTable.name}.${question.sqlColumnName}` : question.sqlColumnName}
             </div>
           </div>
           <Button
@@ -122,14 +130,79 @@ function SortableQuestionItem({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>SQL Column Name *</Label>
-              <Input
-                value={question.sqlColumnName}
-                onChange={(e) => onUpdate(question.id, { sqlColumnName: e.target.value })}
-                placeholder="e.g., email_address"
-              />
-            </div>
+            {/* Table and Column Selection */}
+            {userDefinedTables && userDefinedTables.length > 0 && (
+              <div className="bg-blue-50 p-3 rounded border border-blue-200 space-y-3">
+                <div className="text-xs font-semibold text-blue-900">Database Column Mapping</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Select Table (optional)</Label>
+                    <Select
+                      value={question.tableName || ''}
+                      onChange={(e) => {
+                        const tableId = e.target.value
+                        if (tableId) {
+                          // Auto-select first column if available
+                          const table = userDefinedTables.find((t) => t.id === tableId)
+                          if (table && table.columns.length > 0) {
+                            onUpdate(question.id, {
+                              tableName: tableId,
+                              sqlColumnName: table.columns[0].name,
+                            })
+                          } else {
+                            onUpdate(question.id, { tableName: tableId, sqlColumnName: '' })
+                          }
+                        } else {
+                          onUpdate(question.id, { tableName: undefined })
+                        }
+                      }}
+                    >
+                      <option value="">No specific table</option>
+                      {userDefinedTables.map((table) => (
+                        <option key={table.id} value={table.id}>
+                          {table.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Select Column *</Label>
+                    {selectedTable ? (
+                      <Select
+                        value={question.sqlColumnName}
+                        onChange={(e) => onUpdate(question.id, { sqlColumnName: e.target.value })}
+                      >
+                        <option value="">Choose a column...</option>
+                        {selectedTable.columns.map((col) => (
+                          <option key={col.id} value={col.name}>
+                            {col.name} ({col.dataType})
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input
+                        value={question.sqlColumnName}
+                        onChange={(e) => onUpdate(question.id, { sqlColumnName: e.target.value })}
+                        placeholder="e.g., email_address"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Standard column input when no tables defined */}
+            {(!userDefinedTables || userDefinedTables.length === 0) && (
+              <div className="space-y-2">
+                <Label>SQL Column Name *</Label>
+                <Input
+                  value={question.sqlColumnName}
+                  onChange={(e) => onUpdate(question.id, { sqlColumnName: e.target.value })}
+                  placeholder="e.g., email_address"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Placeholder</Label>
@@ -241,6 +314,7 @@ function SortableQuestionItem({
 
 export function QuestionBuilder({
   questions,
+  userDefinedTables,
   onAddQuestion,
   onUpdateQuestion,
   onDeleteQuestion,
@@ -308,6 +382,7 @@ export function QuestionBuilder({
                     question={question}
                     index={index}
                     allQuestions={questions}
+                    userDefinedTables={userDefinedTables}
                     onUpdate={onUpdateQuestion}
                     onDelete={onDeleteQuestion}
                   />
