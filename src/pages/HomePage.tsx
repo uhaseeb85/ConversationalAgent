@@ -125,7 +125,7 @@ export function HomePage() {
                       {flow.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                     {flow.isPublic && (
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      <Badge variant="secondary" className="border-blue-200 dark:border-blue-800">
                         <Globe className="h-3 w-3 mr-1" />
                         Public
                       </Badge>

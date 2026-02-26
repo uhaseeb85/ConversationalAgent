@@ -31,7 +31,7 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-3">
@@ -43,7 +43,7 @@ export function ForgotPasswordPage() {
           <h1 className="text-xl font-semibold text-gray-800">Reset your password</h1>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border p-8">
+        <div className="bg-card rounded-2xl shadow-xl border p-8">
           {submitted ? (
             <div className="text-center space-y-4">
               <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">

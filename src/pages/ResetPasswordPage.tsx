@@ -44,8 +44,8 @@ export function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl border p-8 max-w-md w-full text-center space-y-4">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-4">
+        <div className="bg-card rounded-2xl shadow-xl border p-8 max-w-md w-full text-center space-y-4">
           <p className="text-red-600 font-medium">Missing reset token.</p>
           <Link to="/forgot-password" className="text-primary hover:underline text-sm">
             Request a new reset link
@@ -56,7 +56,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-3">
@@ -65,10 +65,10 @@ export function ResetPasswordPage() {
               WorkFlow Studio
             </span>
           </div>
-          <h1 className="text-xl font-semibold text-gray-800">Set a new password</h1>
+          <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Set a new password</h1>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border p-8">
+        <div className="bg-card rounded-2xl shadow-xl border p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg border border-red-200">

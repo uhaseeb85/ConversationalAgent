@@ -31,7 +31,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-3">
@@ -43,7 +43,7 @@ export function LoginPage() {
           <h1 className="text-xl font-semibold text-gray-800">Sign in to your account</h1>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border p-8">
+        <div className="bg-card rounded-2xl shadow-xl border p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             {notice && (
               <div className="bg-green-50 text-green-700 text-sm px-4 py-3 rounded-lg border border-green-200">

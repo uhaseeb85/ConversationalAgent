@@ -1,8 +1,9 @@
 import { ReactNode, useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Home, FileText, Send, Settings, PlusCircle, ShieldCheck, LogOut, ChevronDown, User, Sparkles } from 'lucide-react'
+import { Home, FileText, Send, Settings, PlusCircle, ShieldCheck, LogOut, ChevronDown, User, Sparkles, Moon, Sun } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 
 interface LayoutProps {
   children?: ReactNode
@@ -12,6 +13,7 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -58,8 +60,8 @@ export function Layout({ children }: LayoutProps) {
     : ''
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50">
-      <nav className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950">
+      <nav className="border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
             <Link to="/" className="flex items-center space-x-2">
@@ -89,6 +91,19 @@ export function Layout({ children }: LayoutProps) {
                 )
               })}
 
+              {/* Theme toggle */}
+              <button
+                onClick={toggleTheme}
+                className="flex items-center justify-center w-9 h-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Toggle theme"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="h-5 w-5" />
+                ) : (
+                  <Moon className="h-5 w-5" />
+                )}
+              </button>
+
               {/* User avatar + dropdown */}
               {user && (
                 <div className="relative ml-2" ref={dropdownRef}>
@@ -106,7 +121,7 @@ export function Layout({ children }: LayoutProps) {
                   </button>
 
                   {dropdownOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border bg-white shadow-lg py-1 z-50">
+                    <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border bg-card shadow-lg py-1 z-50">
                       <div className="px-4 py-2 border-b">
                         <p className="text-sm font-medium truncate">{user.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{user.email}</p>
