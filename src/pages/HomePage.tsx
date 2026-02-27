@@ -1,10 +1,10 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '@/lib/store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText, Globe, Download, Upload } from 'lucide-react'
+import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText, Globe, Download, Upload, X, Sparkles, Play, BarChart3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { generateId } from '@/lib/utils'
 import type { OnboardingFlow } from '@/types'
@@ -15,6 +15,16 @@ export function HomePage() {
   const deleteFlow = useStore((state) => state.deleteFlow)
   const addFlow = useStore((state) => state.addFlow)
   const importRef = useRef<HTMLInputElement>(null)
+  const [guidanceDismissed, setGuidanceDismissed] = useState(
+    () => localStorage.getItem('ca_guidance_dismissed') === '1'
+  )
+
+  const showGuidance = !guidanceDismissed && flows.length <= 1
+
+  const dismissGuidance = () => {
+    localStorage.setItem('ca_guidance_dismissed', '1')
+    setGuidanceDismissed(true)
+  }
 
   const getSubmissionCount = (flowId: string) => {
     return submissions.filter((s) => s.flowId === flowId).length
@@ -79,7 +89,7 @@ export function HomePage() {
         </div>
         <h1 className="text-5xl font-bold mb-4">
           Onboard customers with{' '}
-          <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-300 dark:to-slate-400 bg-clip-text text-transparent">
             intelligent conversations
           </span>
         </h1>
@@ -112,6 +122,70 @@ export function HomePage() {
           />
         </div>
       </div>
+
+      {/* Getting Started Guidance */}
+      {showGuidance && (
+        <Card className="mb-12 border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Getting Started
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={dismissGuidance} aria-label="Dismiss guide">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <CardDescription>Follow these steps to set up your first onboarding flow</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-background/60">
+                <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">1</span>
+                <div>
+                  <p className="font-medium text-sm">Create a Flow</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Click <Link to="/flows/new" className="text-primary underline">Create Flow</Link> to define questions and SQL mappings.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-background/60">
+                <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">2</span>
+                <div>
+                  <p className="font-medium text-sm">Preview the Conversation</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Hit <Play className="inline h-3 w-3" /> <strong>Preview Flow</strong> on any card below to see the chat UI.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-background/60">
+                <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">3</span>
+                <div>
+                  <p className="font-medium text-sm">Review Submissions</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Open <Link to="/submissions" className="text-primary underline">Submissions</Link> to view answers and generated SQL.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-background/60">
+                <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">4</span>
+                <div>
+                  <p className="font-medium text-sm">Configure AI (Optional)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Visit <Link to="/settings" className="text-primary underline">Settings</Link> to enable AI-enhanced conversations.
+                  </p>
+                </div>
+              </div>
+            </div>
+            {flows.length === 1 && flows[0].name.includes('Demo') && (
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                <BarChart3 className="inline h-3 w-3 mr-1" />
+                A demo OAuth flow has been created for you — try previewing it to see how the conversational UI works!
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Active Flows Section */}
       <div className="mb-8">

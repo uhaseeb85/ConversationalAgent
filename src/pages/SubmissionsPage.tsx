@@ -91,7 +91,7 @@ export function SubmissionsPage() {
     <div className="max-w-7xl mx-auto">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-300 dark:to-slate-400 bg-clip-text text-transparent">
             Submissions
           </h1>
           <p className="text-muted-foreground">

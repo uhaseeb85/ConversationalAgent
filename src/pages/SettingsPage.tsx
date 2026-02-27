@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { loadAIConfig, saveAIConfig, chatCompletion, fetchOpenRouterModels, AI_PROVIDERS, type AIModel } from '@/lib/ai-client'
 import { useStore } from '@/lib/store'
+import { replaceAllFlows, replaceAllSubmissions, clearFlows, clearSubmissions, estimateStorageUsage } from '@/lib/idb'
 import { Settings, Bot, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, RefreshCw, Download, Upload, Trash2, Database } from 'lucide-react'
 
 export function SettingsPage() {
@@ -25,6 +26,11 @@ export function SettingsPage() {
   const [loadingModels, setLoadingModels] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string>('')
+  const [storageUsage, setStorageUsage] = useState<string>('...')
+
+  useEffect(() => {
+    estimateStorageUsage().then(setStorageUsage)
+  }, [flows, submissions])
 
   const handleSelectProvider = (providerId: string) => {
     const provider = AI_PROVIDERS.find((p) => p.id === providerId)
@@ -97,8 +103,8 @@ export function SettingsPage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent flex items-center gap-3">
-          <Settings className="h-9 w-9 text-indigo-600" />
+        <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-300 dark:to-slate-400 bg-clip-text text-transparent flex items-center gap-3">
+          <Settings className="h-9 w-9 text-primary" />
           App Settings
         </h1>
         <p className="text-muted-foreground">Configure AI and database connections for your flows.</p>
@@ -292,10 +298,7 @@ export function SettingsPage() {
             </Card>
             <Card className="p-4">
               <div className="text-2xl font-bold">
-                {(() => {
-                  const bytes = (localStorage.getItem('ca_flows')?.length ?? 0) + (localStorage.getItem('ca_submissions')?.length ?? 0)
-                  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
-                })()}
+                {storageUsage}
               </div>
               <div className="text-sm text-muted-foreground">Storage Used</div>
             </Card>
@@ -339,8 +342,8 @@ export function SettingsPage() {
                       if (!confirm(`Import ${data.flows.length} flows and ${data.submissions.length} submissions? This will REPLACE all existing data.`)) return
                       setFlows(data.flows)
                       setSubmissions(data.submissions)
-                      localStorage.setItem('ca_flows', JSON.stringify(data.flows))
-                      localStorage.setItem('ca_submissions', JSON.stringify(data.submissions))
+                      replaceAllFlows(data.flows)
+                      replaceAllSubmissions(data.submissions)
                       alert('Data imported successfully!')
                     } catch {
                       alert('Invalid JSON file.')
@@ -363,8 +366,8 @@ export function SettingsPage() {
                 if (!confirm('This action CANNOT be undone. Continue?')) return
                 setFlows([])
                 setSubmissions([])
-                localStorage.removeItem('ca_flows')
-                localStorage.removeItem('ca_submissions')
+                clearFlows()
+                clearSubmissions()
                 alert('All data cleared.')
               }}
             >

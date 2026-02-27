@@ -149,7 +149,7 @@ export function TableSchemaBuilder({
                 className="border border-gray-200 rounded-lg overflow-hidden shadow-sm"
               >
                 {/* Table Header */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border-b">
+                <div className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-800 dark:to-gray-800 p-4 border-b">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => toggleTableExpanded(table.id)}

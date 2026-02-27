@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { Layout } from './components/Layout'
@@ -9,13 +8,8 @@ import { OnboardPage } from './pages/OnboardPage'
 import { SubmissionsPage } from './pages/SubmissionsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
-import { initStore } from './lib/store'
 
 function App() {
-  useEffect(() => {
-    initStore()
-  }, [])
-
   return (
     <ThemeProvider>
       <Router>
