@@ -1,49 +1,60 @@
-import { useEffect, useState } from 'react'
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { useStore, initStore } from '@/lib/store'
-import { useAuth } from '@/contexts/AuthContext'
+import { useStore } from '@/lib/store'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText, Globe } from 'lucide-react'
+import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText, Globe, Download, Upload } from 'lucide-react'
 import { format } from 'date-fns'
+import { generateId } from '@/lib/utils'
 import type { OnboardingFlow } from '@/types'
 
 export function HomePage() {
-  const { user } = useAuth()
   const flows = useStore((state) => state.flows)
   const submissions = useStore((state) => state.submissions)
   const deleteFlow = useStore((state) => state.deleteFlow)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    initStore().then(() => setIsLoading(false))
-  }, [])
+  const addFlow = useStore((state) => state.addFlow)
+  const importRef = useRef<HTMLInputElement>(null)
 
   const getSubmissionCount = (flowId: string) => {
     return submissions.filter((s) => s.flowId === flowId).length
   }
 
-  const canModifyFlow = (flow: OnboardingFlow) => {
-    if (!user) return false
-    return user.role === 'admin' || flow.createdBy === user.id
-  }
-
   const handleDelete = async (flowId: string, flowName: string) => {
     if (window.confirm(`Are you sure you want to delete "${flowName}"?`)) {
-      await deleteFlow(flowId)
+      deleteFlow(flowId)
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading flows...</p>
-        </div>
-      </div>
-    )
+  const handleExportFlow = (flow: OnboardingFlow) => {
+    const blob = new Blob([JSON.stringify(flow, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${flow.name.replace(/\s+/g, '-').toLowerCase()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportFlow = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target?.result as string) as OnboardingFlow
+        addFlow({
+          ...imported,
+          id: generateId(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+      } catch {
+        alert('Invalid flow JSON file.')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   return (
@@ -76,6 +87,17 @@ export function HomePage() {
               View Submissions
             </Button>
           </Link>
+          <Button size="lg" variant="outline" onClick={() => importRef.current?.click()}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Flow
+          </Button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImportFlow}
+          />
         </div>
       </div>
 
@@ -131,22 +153,28 @@ export function HomePage() {
                       </Badge>
                     )}
                   </div>
-                  {canModifyFlow(flow) && (
-                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link to={`/flows/${flow.id}/edit`}>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(flow.id, flow.name)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Export flow"
+                      onClick={() => handleExportFlow(flow)}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Link to={`/flows/${flow.id}/edit`}>
+                      <Button variant="ghost" size="sm">
+                        <Edit className="h-4 w-4" />
                       </Button>
-                    </div>
-                  )}
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(flow.id, flow.name)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
                 <CardTitle className="text-xl">{flow.name}</CardTitle>
                 <CardDescription className="line-clamp-2">{flow.description}</CardDescription>

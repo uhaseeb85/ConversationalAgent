@@ -6,11 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { generateSQL } from '@/lib/sql-generator'
-import { initStore } from '@/lib/store'
-import { Copy, Check, Eye, Database, Calendar, FileCode, Play, X, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Copy, Check, Eye, Database, Calendar, FileCode } from 'lucide-react'
 import { format } from 'date-fns'
-import { executeSQL } from '@/lib/db-api'
-import type { ExecutionResult } from '@/types'
 
 export function SubmissionsPage() {
   const { id } = useParams()
@@ -21,24 +18,17 @@ export function SubmissionsPage() {
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
   const [generatedSQL, setGeneratedSQL] = useState<string>('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | SubmissionStatus>('all')
-  const [executing, setExecuting] = useState(false)
-  const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
-  const [showExecModal, setShowExecModal] = useState(false)
 
   useEffect(() => {
-    initStore().then(() => {
-      setIsLoading(false)
-      if (id) {
-        const submission = submissions.find((s) => s.id === id)
-        if (submission) {
-          setSelectedSubmission(submission)
-          handleGenerateSQL(submission)
-        }
+    if (id) {
+      const submission = submissions.find((s) => s.id === id)
+      if (submission) {
+        setSelectedSubmission(submission)
+        handleGenerateSQL(submission)
       }
-    })
-  }, [id])
+    }
+  }, [id, submissions])
 
   const handleGenerateSQL = (submission: Submission) => {
     const flow = flows.find((f) => f.id === submission.flowId)
@@ -68,27 +58,6 @@ export function SubmissionsPage() {
     await updateSubmission(submissionId, { status })
   }
 
-  const handleExecuteSQL = async () => {
-    if (!selectedSubmission || !generatedSQL) return
-    setExecuting(true)
-    setExecutionResult(null)
-    try {
-      const statements = generatedSQL.split(/;\s*\n/).map(s => s.trim()).filter(Boolean)
-      const result = await executeSQL(statements)
-      setExecutionResult(result)
-      if (result.ok) {
-        await handleStatusChange(selectedSubmission.id, 'executed')
-      } else {
-        await handleStatusChange(selectedSubmission.id, 'failed')
-      }
-    } catch (err) {
-      setExecutionResult({ ok: false, results: [], rolledBack: true, error: String(err) })
-      await handleStatusChange(selectedSubmission.id, 'failed')
-    } finally {
-      setExecuting(false)
-    }
-  }
-
   const filteredSubmissions = filter === 'all' 
     ? submissions 
     : submissions.filter(s => s.status === filter)
@@ -96,17 +65,6 @@ export function SubmissionsPage() {
   const sortedSubmissions = [...filteredSubmissions].sort(
     (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
   )
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading submissions...</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -249,22 +207,11 @@ export function SubmissionsPage() {
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-start justify-between mb-3">
                       <h3 className="font-semibold flex items-center">
                         <FileCode className="h-4 w-4 mr-2" />
                         Generated SQL
                       </h3>
-                      <div className="flex gap-2">
-                      {selectedSubmission.status === 'pending' && (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => setShowExecModal(true)}
-                        >
-                          <Play className="h-4 w-4 mr-1" />
-                          Execute
-                        </Button>
-                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -282,7 +229,6 @@ export function SubmissionsPage() {
                           </>
                         )}
                       </Button>
-                      </div>
                     </div>
                     <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-sm overflow-x-auto">
                       <code>{generatedSQL}</code>
@@ -331,75 +277,6 @@ export function SubmissionsPage() {
         </div>
       )}
 
-      {/* Execute SQL confirmation modal */}
-      {showExecModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <Database className="h-5 w-5 text-primary" />
-                  Execute SQL
-                </h2>
-                <button onClick={() => { setShowExecModal(false); setExecutionResult(null) }} className="text-muted-foreground hover:text-foreground">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {!executionResult ? (
-                <>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    This will execute the following SQL against the connected database in a transaction. If any statement fails, all changes will be rolled back.
-                  </p>
-                  <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs overflow-x-auto mb-6">
-                    <code>{generatedSQL}</code>
-                  </pre>
-                  <div className="flex gap-3 justify-end">
-                    <button onClick={() => setShowExecModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-accent">
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleExecuteSQL}
-                      disabled={executing}
-                      className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {executing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                      {executing ? 'Executing...' : 'Execute'}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className={`flex items-center gap-2 mb-4 p-3 rounded-lg ${executionResult.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-                    {executionResult.ok
-                      ? <><CheckCircle2 className="h-5 w-5" /> All statements executed successfully</>
-                      : <><AlertTriangle className="h-5 w-5" /> Execution failed — changes rolled back</>
-                    }
-                  </div>
-                  {executionResult.error && (
-                    <p className="text-sm text-red-600 mb-4 font-mono">{executionResult.error}</p>
-                  )}
-                  <div className="space-y-2 mb-6">
-                    {(executionResult.results ?? []).map((r, i) => (
-                      <div key={i} className={`flex items-center justify-between text-sm p-2 rounded ${r.success ? 'bg-green-50' : 'bg-red-50'}`}>
-                        <span className="font-mono truncate flex-1 mr-2">{r.statement.slice(0, 60)}...</span>
-                        <span className={r.success ? 'text-green-700' : 'text-red-700'}>
-                          {r.success ? `✓ ${r.rowsAffected ?? 0} rows` : `✗ ${r.error}`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-end">
-                    <button onClick={() => { setShowExecModal(false); setExecutionResult(null) }} className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">
-                      Close
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

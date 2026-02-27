@@ -1,65 +1,80 @@
 import { create } from 'zustand'
 import { AppStore, OnboardingFlow, Submission } from '../types'
-import {
-  fetchFlows,
-  createFlow as apiCreateFlow,
-  updateFlow as apiUpdateFlow,
-  deleteFlow as apiDeleteFlow,
-} from './flows-api'
-import {
-  fetchSubmissions,
-  createSubmission as apiCreateSubmission,
-  patchSubmission as apiPatchSubmission,
-} from './submissions-api'
 
-// Zustand store — in-memory cache backed by server API
-export const useStore = create<AppStore>((set) => ({
+const FLOWS_KEY = 'ca_flows'
+const SUBMISSIONS_KEY = 'ca_submissions'
+
+function readFlows(): OnboardingFlow[] {
+  try {
+    const raw = localStorage.getItem(FLOWS_KEY)
+    return raw ? (JSON.parse(raw) as OnboardingFlow[]) : []
+  } catch {
+    return []
+  }
+}
+
+function readSubmissions(): Submission[] {
+  try {
+    const raw = localStorage.getItem(SUBMISSIONS_KEY)
+    return raw ? (JSON.parse(raw) as Submission[]) : []
+  } catch {
+    return []
+  }
+}
+
+function writeFlows(flows: OnboardingFlow[]) {
+  localStorage.setItem(FLOWS_KEY, JSON.stringify(flows))
+}
+
+function writeSubmissions(submissions: Submission[]) {
+  localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions))
+}
+
+// Zustand store — localStorage-backed, no server required
+export const useStore = create<AppStore>((set, get) => ({
   flows: [],
   submissions: [],
 
   setFlows: (flows) => set({ flows }),
   setSubmissions: (submissions) => set({ submissions }),
 
-  addFlow: async (flow: OnboardingFlow) => {
-    const created = await apiCreateFlow(flow)
-    set((state) => ({ flows: [...state.flows, created] }))
+  addFlow: (flow: OnboardingFlow) => {
+    const flows = [...get().flows, flow]
+    writeFlows(flows)
+    set({ flows })
   },
 
-  updateFlow: async (id: string, updates: Partial<OnboardingFlow>) => {
-    const updated = await apiUpdateFlow(id, updates)
-    set((state) => ({
-      flows: state.flows.map((f) => (f.id === id ? updated : f)),
-    }))
+  updateFlow: (id: string, updates: Partial<OnboardingFlow>) => {
+    const flows = get().flows.map((f) => (f.id === id ? { ...f, ...updates } : f))
+    writeFlows(flows)
+    set({ flows })
   },
 
-  deleteFlow: async (id: string) => {
-    await apiDeleteFlow(id)
-    set((state) => ({ flows: state.flows.filter((f) => f.id !== id) }))
+  deleteFlow: (id: string) => {
+    const flows = get().flows.filter((f) => f.id !== id)
+    writeFlows(flows)
+    set({ flows })
   },
 
-  addSubmission: async (submission: Submission) => {
-    const created = await apiCreateSubmission(submission)
-    set((state) => ({ submissions: [...state.submissions, created] }))
+  addSubmission: (submission: Submission) => {
+    const submissions = [...get().submissions, submission]
+    writeSubmissions(submissions)
+    set({ submissions })
   },
 
-  updateSubmission: async (id: string, updates: Partial<Submission>) => {
-    const patch = {
-      status: updates.status,
-      generatedSQL: updates.generatedSQL,
-      executedAt: updates.executedAt ?? undefined,
-    }
-    const updated = await apiPatchSubmission(id, patch)
-    set((state) => ({
-      submissions: state.submissions.map((s) => (s.id === id ? updated : s)),
-    }))
+  updateSubmission: (id: string, updates: Partial<Submission>) => {
+    const submissions = get().submissions.map((s) =>
+      s.id === id ? { ...s, ...updates } : s
+    )
+    writeSubmissions(submissions)
+    set({ submissions })
   },
 }))
 
-// Initialize store by fetching from server (replaces old IndexedDB init)
-export async function initStore() {
-  const [flows, submissions] = await Promise.all([
-    fetchFlows(),
-    fetchSubmissions(),
-  ])
-  useStore.setState({ flows, submissions })
+// Initialize store from localStorage (synchronous)
+export function initStore() {
+  useStore.setState({
+    flows: readFlows(),
+    submissions: readSubmissions(),
+  })
 }

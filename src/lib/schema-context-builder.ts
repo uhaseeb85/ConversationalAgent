@@ -6,7 +6,6 @@
  */
 
 import type { UserDefinedTable } from '../types'
-import { getSchema, getDBStatus } from './db-api'
 
 export interface SchemaContextTable {
   name: string
@@ -37,35 +36,7 @@ export async function buildSchemaContext(
   userDefinedTables?: UserDefinedTable[]
 ): Promise<SchemaContext> {
   const tables: SchemaContextTable[] = []
-  let hasLiveConnection = false
-
-  // Try to get live DB schema
-  try {
-    const status = await getDBStatus()
-    if (status.type) {
-      hasLiveConnection = true
-      const schemaResult = await getSchema()
-      if (schemaResult.ok && schemaResult.tables) {
-        // Convert SchemaTable to SchemaContextTable
-        tables.push(
-          ...schemaResult.tables.map((t) => ({
-            name: t.name,
-            columns: t.columns.map((c) => ({
-              name: c.name,
-              type: c.dataType,
-              nullable: c.nullable,
-              primaryKey: c.isPrimaryKey,
-              checkValues: c.checkValues,
-            })),
-            source: 'database' as const,
-          }))
-        )
-      }
-    }
-  } catch (err) {
-    // No live DB connection or error fetching schema - not a fatal error
-    console.warn('Could not fetch live database schema:', err)
-  }
+  const hasLiveConnection = false
 
   // Add user-defined tables
   if (userDefinedTables && userDefinedTables.length > 0) {
