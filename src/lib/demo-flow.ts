@@ -39,7 +39,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qClientId,
       type: 'number',
-      label: 'Existing Client ID',
+      label: 'What is the existing Client ID you want to update?',
       placeholder: 'e.g. 42',
       helpText: 'The numeric ID of the client you want to update.',
       required: true,
@@ -59,7 +59,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qAppName,
       type: 'text',
-      label: 'Application Name',
+      label: 'What is the name of your application?',
       placeholder: 'e.g. My SaaS App',
       helpText: 'A display name for your OAuth application.',
       required: true,
@@ -75,7 +75,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qClientType,
       type: 'single-select',
-      label: 'Client Type',
+      label: 'What type of client is your application?',
       helpText: 'Confidential clients can keep secrets secure (server-side). Public clients cannot (SPAs, mobile).',
       options: ['confidential', 'public'],
       required: true,
@@ -87,7 +87,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qRedirectUris,
       type: 'text',
-      label: 'Redirect URIs',
+      label: 'What are the redirect URIs for your application?',
       placeholder: 'https://myapp.example.com/callback',
       helpText: 'Comma-separated list of allowed redirect URIs.',
       required: true,
@@ -102,7 +102,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qGrantTypes,
       type: 'multi-select',
-      label: 'Grant Types',
+      label: 'Which OAuth grant types does your application need?',
       helpText: 'Select the OAuth grant types your application requires.',
       options: ['authorization_code', 'client_credentials', 'refresh_token', 'implicit'],
       required: true,
@@ -114,7 +114,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qScopes,
       type: 'multi-select',
-      label: 'Requested Scopes',
+      label: 'Which access scopes should your application request?',
       helpText: 'Scopes define the level of access your application is requesting.',
       options: ['openid', 'profile', 'email', 'read', 'write', 'admin'],
       required: true,
@@ -126,7 +126,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qContactEmail,
       type: 'email',
-      label: 'Contact Email',
+      label: 'What is your developer contact email?',
       placeholder: 'developer@example.com',
       helpText: "We'll use this to notify you about breaking API changes.",
       required: true,
@@ -141,7 +141,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qDescription,
       type: 'text',
-      label: 'Application Description',
+      label: 'How would you describe your application?',
       placeholder: 'A brief description of what your app does...',
       helpText: 'Shown to users on the consent screen.',
       required: false,
@@ -155,7 +155,7 @@ export function createDemoFlow(): OnboardingFlow {
     {
       id: qLogoUrl,
       type: 'text',
-      label: 'Logo URL',
+      label: 'What is the URL of your application logo?',
       placeholder: 'https://myapp.example.com/logo.png',
       helpText: 'Optional logo displayed on the OAuth consent screen.',
       required: false,
