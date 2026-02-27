@@ -54,8 +54,8 @@ export function OnboardPage() {
           content: welcomeText,
         },
       ])
-      setTimeout(() => showNextQuestion(foundFlow, 0, []), 1000)
-    }, 500)
+      setTimeout(() => showNextQuestion(foundFlow, 0, []), 400)
+    }, 200)
   }, [flowId, flows, navigate])
 
   useEffect(() => {
@@ -222,7 +222,7 @@ Be warm and concise. Do not add unrelated commentary.`
         ])
         setIsTyping(false)
         setCurrentQuestionIndex(qIndex)
-      }, 800)
+      }, 300)
     }
   }
 
@@ -242,39 +242,44 @@ Be warm and concise. Do not add unrelated commentary.`
     }
     setValidationError(null)
 
-    // AI answer extraction for free-text inputs
-    let valueToSubmit = rawValue
-    if (typeof rawValue === 'string' && rawValue.trim()) {
-      try {
-        valueToSubmit = await extractAnswer(rawValue, currentQuestion, aiConfig)
-      } catch {
-        valueToSubmit = rawValue
-      }
-    }
-
-    // Add user response to chat
-    const displayValue = Array.isArray(valueToSubmit)
-      ? valueToSubmit.join(', ')
-      : valueToSubmit
+    // Use raw value immediately — extraction runs in background
+    const displayValue = Array.isArray(rawValue)
+      ? rawValue.join(', ')
+      : (rawValue as string)
 
     setChatMessages((prev) => [
       ...prev,
       { type: 'user', content: displayValue || '(skipped)' },
     ])
 
-    // Save response
+    // Save response with raw value and show next question immediately
     const newResponse: Response = {
       questionId: currentQuestion.id,
-      value: valueToSubmit || null,
+      value: rawValue || null,
     }
 
     const updatedResponses = [...responses, newResponse]
     setResponses(updatedResponses)
 
-    // Show next question
-    setTimeout(() => {
-      showNextQuestion(flow, currentQuestionIndex + 1, updatedResponses)
-    }, 300)
+    // Show next question without waiting for extraction
+    showNextQuestion(flow, currentQuestionIndex + 1, updatedResponses)
+
+    // Run AI extraction in background and update the response value
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+      extractAnswer(rawValue, currentQuestion, aiConfig)
+        .then((extracted) => {
+          if (extracted !== rawValue) {
+            setResponses((prev) =>
+              prev.map((r) =>
+                r.questionId === currentQuestion.id
+                  ? { ...r, value: extracted }
+                  : r
+              )
+            )
+          }
+        })
+        .catch(() => { /* keep raw value on failure */ })
+    }
   }
 
   const completeOnboarding = async (finalResponses: Response[]) => {

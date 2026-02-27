@@ -158,7 +158,7 @@ export async function streamChatCompletion(
       model: cfg.model,
       messages,
       stream: true,
-      max_tokens: 512,
+      max_tokens: 150,
       temperature: 0.7,
     }),
   })
@@ -223,7 +223,7 @@ export async function chatCompletion(
       model: cfg.model,
       messages,
       stream: false,
-      max_tokens: 2000,
+      max_tokens: 200,
       temperature: 0.3,
     }),
   })
