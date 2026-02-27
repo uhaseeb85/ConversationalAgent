@@ -194,12 +194,7 @@ export function HomePage() {
             <h2 className="text-2xl font-semibold">Active Onboarding Flows</h2>
             <p className="text-muted-foreground text-sm mt-1">Select a flow to start onboarding a customer</p>
           </div>
-          {flows.length > 0 && (
-            <Link to="/flows/new" className="text-primary hover:underline text-sm flex items-center">
-              Manage All Flows
-              <span className="ml-1">→</span>
-            </Link>
-          )}
+
         </div>
       </div>
 
