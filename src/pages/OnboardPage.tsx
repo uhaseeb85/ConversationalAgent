@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw } from 'lucide-react'
-import { streamChatCompletion, loadAIConfig, AIConfig } from '@/lib/ai-client'
+import { streamChatCompletion, loadAIConfig } from '@/lib/ai-client'
 import { extractAnswer } from '@/lib/answer-extractor'
 
 
@@ -30,7 +30,6 @@ export function OnboardPage() {
   const [completedSubmission, setCompletedSubmission] = useState<Submission | null>(null)
   const [copiedSQL, setCopiedSQL] = useState(false)
   const [startedAt] = useState(new Date())
-  const [aiConfig] = useState<AIConfig>(() => loadAIConfig())
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -45,17 +44,15 @@ export function OnboardPage() {
     setFlow(foundFlow)
 
     // Initial welcome message
-    setTimeout(() => {
-      const welcomeText = foundFlow.welcomeMessage || 
-        `Welcome! I'll help you get onboarded. Let's get started with a few questions.`
-      setChatMessages([
-        {
-          type: 'bot',
-          content: welcomeText,
-        },
-      ])
-      setTimeout(() => showNextQuestion(foundFlow, 0, []), 400)
-    }, 200)
+    const welcomeText = foundFlow.welcomeMessage || 
+      `Welcome! I'll help you get onboarded. Let's get started with a few questions.`
+    setChatMessages([
+      {
+        type: 'bot',
+        content: welcomeText,
+      },
+    ])
+    showNextQuestion(foundFlow, 0, [])
   }, [flowId, flows, navigate])
 
   useEffect(() => {
@@ -174,6 +171,7 @@ export function OnboardPage() {
     }
 
     const qIndex = flowData.questions.indexOf(nextQuestion)
+    const aiConfig = loadAIConfig()
 
     if (aiConfig.enabled) {
       setIsTyping(true)
@@ -214,15 +212,11 @@ Be warm and concise. Do not add unrelated commentary.`
         setCurrentQuestionIndex(qIndex)
       })
     } else {
-      setIsTyping(true)
-      setTimeout(() => {
-        setChatMessages((prev) => [
-          ...prev,
-          { type: 'bot', content: nextQuestion.label, questionId: nextQuestion.id },
-        ])
-        setIsTyping(false)
-        setCurrentQuestionIndex(qIndex)
-      }, 300)
+      setChatMessages((prev) => [
+        ...prev,
+        { type: 'bot', content: nextQuestion.label, questionId: nextQuestion.id },
+      ])
+      setCurrentQuestionIndex(qIndex)
     }
   }
 
@@ -266,7 +260,8 @@ Be warm and concise. Do not add unrelated commentary.`
 
     // Run AI extraction in background and update the response value
     if (typeof rawValue === 'string' && rawValue.trim()) {
-      extractAnswer(rawValue, currentQuestion, aiConfig)
+      const currentAiConfig = loadAIConfig()
+      extractAnswer(rawValue, currentQuestion, currentAiConfig)
         .then((extracted) => {
           if (extracted !== rawValue) {
             setResponses((prev) =>
