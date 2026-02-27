@@ -132,7 +132,6 @@ export function AIFlowBuilderPage() {
     // Demo mode: use pre-built questions instead of calling AI
     if (isDemoMode) {
       setQuestions(DEMO_QUESTIONS)
-      setCurrentStep(4)
       return
     }
 
@@ -147,9 +146,6 @@ export function AIFlowBuilderPage() {
 
       if (result.questions.length === 0) {
         setError('AI did not generate any questions. Please try rephrasing your purpose.')
-      } else {
-        // Auto-advance to next step
-        setCurrentStep(4)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate questions')
@@ -172,7 +168,6 @@ export function AIFlowBuilderPage() {
     // Demo mode: use pre-built SQL operations
     if (isDemoMode) {
       setSqlOperations(DEMO_SQL_OPERATIONS)
-      setCurrentStep(5)
       return
     }
 
@@ -195,9 +190,6 @@ export function AIFlowBuilderPage() {
 
       if (result.operations.length === 0) {
         setError('AI did not generate any SQL operations.')
-      } else {
-        // Auto-advance to review step
-        setCurrentStep(5)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate SQL operations')
