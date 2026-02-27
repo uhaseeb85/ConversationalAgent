@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select'
 import { QuestionBuilder } from '@/components/QuestionBuilder'
 import { SchemaImporter } from '@/components/SchemaImporter'
 import { TableSchemaBuilder } from '@/components/TableSchemaBuilder'
-import { Question, SQLOperation, SQLCondition, UserDefinedTable } from '@/types'
+import { Question, SQLOperation, SQLCondition, UserDefinedTable, RunCondition } from '@/types'
 import { generateId } from '@/lib/utils'
 import { Save, ArrowLeft, Database, HelpCircle, Import, Download, Trash2, Layers } from 'lucide-react'
 
@@ -615,6 +615,113 @@ export function FlowBuilderPage() {
                       </Button>
                     </div>
                   )}
+
+                  {/* Run Conditions — gate whether this operation executes at all */}
+                  <div className="space-y-2 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Only Run When…</Label>
+                      {(op.runConditions ?? []).length > 1 && (
+                        <Select
+                          value={op.runConditionsOperator ?? 'AND'}
+                          onChange={(e) => {
+                            const updated = [...sqlOperations]
+                            updated[opIdx] = { ...op, runConditionsOperator: e.target.value as 'AND' | 'OR' }
+                            setSqlOperations(updated)
+                          }}
+                          className="w-20 text-xs"
+                        >
+                          <option value="AND">AND</option>
+                          <option value="OR">OR</option>
+                        </Select>
+                      )}
+                    </div>
+                    {(op.runConditions ?? []).map((rc, rcIdx) => (
+                      <div key={rc.id ?? rcIdx} className="grid grid-cols-4 gap-2 items-end">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Question</Label>
+                          <Select
+                            value={rc.questionId}
+                            onChange={(e) => {
+                              const updated = [...sqlOperations]
+                              const rcs = [...(op.runConditions ?? [])]
+                              rcs[rcIdx] = { ...rc, questionId: e.target.value }
+                              updated[opIdx] = { ...op, runConditions: rcs }
+                              setSqlOperations(updated)
+                            }}
+                          >
+                            <option value="">Select question…</option>
+                            {questions.map((q) => (
+                              <option key={q.id} value={q.id}>{q.label || q.id}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Operator</Label>
+                          <Select
+                            value={rc.operator}
+                            onChange={(e) => {
+                              const updated = [...sqlOperations]
+                              const rcs = [...(op.runConditions ?? [])]
+                              rcs[rcIdx] = { ...rc, operator: e.target.value as RunCondition['operator'] }
+                              updated[opIdx] = { ...op, runConditions: rcs }
+                              setSqlOperations(updated)
+                            }}
+                          >
+                            <option value="equals">equals</option>
+                            <option value="not-equals">not equals</option>
+                            <option value="contains">contains</option>
+                            <option value="greater-than">greater than</option>
+                            <option value="less-than">less than</option>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Value</Label>
+                          <Input
+                            value={rc.value}
+                            onChange={(e) => {
+                              const updated = [...sqlOperations]
+                              const rcs = [...(op.runConditions ?? [])]
+                              rcs[rcIdx] = { ...rc, value: e.target.value }
+                              updated[opIdx] = { ...op, runConditions: rcs }
+                              setSqlOperations(updated)
+                            }}
+                            placeholder="value"
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const updated = [...sqlOperations]
+                            updated[opIdx] = {
+                              ...op,
+                              runConditions: (op.runConditions ?? []).filter((_, i) => i !== rcIdx),
+                            }
+                            setSqlOperations(updated)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const updated = [...sqlOperations]
+                        const newRc: RunCondition = {
+                          id: generateId(),
+                          questionId: '',
+                          operator: 'equals',
+                          value: '',
+                        }
+                        updated[opIdx] = { ...op, runConditions: [...(op.runConditions ?? []), newRc] }
+                        setSqlOperations(updated)
+                      }}
+                    >
+                      + Add Run Condition
+                    </Button>
+                  </div>
                 </div>
               ))}
 

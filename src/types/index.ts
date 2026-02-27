@@ -79,6 +79,14 @@ export interface ColumnMapping {
   columnName: string // Target column in the table
 }
 
+// Run-condition: determines whether a SQL operation is executed at all
+export interface RunCondition {
+  id?: string
+  questionId: string
+  operator: 'equals' | 'not-equals' | 'contains' | 'greater-than' | 'less-than'
+  value: string
+}
+
 // SQL operation definition
 export interface SQLOperation {
   id: string
@@ -87,6 +95,8 @@ export interface SQLOperation {
   label?: string // Optional label for the operation
   columnMappings: ColumnMapping[] // Which questions map to which columns
   conditions: SQLCondition[] // WHERE conditions (for UPDATE/DELETE)
+  runConditions?: RunCondition[] // Gate: only execute this operation when these are satisfied
+  runConditionsOperator?: 'AND' | 'OR' // How to combine runConditions (default: AND)
   order: number // Execution order
 }
 

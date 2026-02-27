@@ -208,6 +208,8 @@ export function createDemoFlow(): OnboardingFlow {
     label: 'Register New OAuth Client',
     columnMappings: sharedMappings,
     conditions: [],
+    runConditions: [{ id: 'demo-rc-insert', questionId: qOperation, operator: 'equals', value: 'Register new client' }],
+    runConditionsOperator: 'AND',
     order: 0,
   }
 
@@ -226,6 +228,8 @@ export function createDemoFlow(): OnboardingFlow {
         valueType: 'question',
       },
     ],
+    runConditions: [{ id: 'demo-rc-update', questionId: qOperation, operator: 'equals', value: 'Update existing client' }],
+    runConditionsOperator: 'AND',
     order: 1,
   }
 

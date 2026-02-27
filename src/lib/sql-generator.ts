@@ -1,4 +1,4 @@
-import { Submission, OnboardingFlow, Response, SQLOperation, SQLCondition } from '../types'
+import { Submission, OnboardingFlow, Response, SQLOperation, SQLCondition, RunCondition } from '../types'
 import { format } from 'date-fns'
 
 /**
@@ -240,6 +240,35 @@ ${whereClause};`
 }
 
 /**
+ * Evaluates a single RunCondition against recorded responses.
+ */
+function evalRunCondition(rc: RunCondition, responses: Response[]): boolean {
+  const response = responses.find((r) => r.questionId === rc.questionId)
+  if (!response) return false
+  const rv = String(response.value).toLowerCase()
+  const cv = String(rc.value).toLowerCase()
+  switch (rc.operator) {
+    case 'equals':       return rv === cv
+    case 'not-equals':   return rv !== cv
+    case 'contains':     return rv.includes(cv)
+    case 'greater-than': { const a = Number.parseFloat(rv); const b = Number.parseFloat(cv); return !Number.isNaN(a) && !Number.isNaN(b) && a > b }
+    case 'less-than':    { const a = Number.parseFloat(rv); const b = Number.parseFloat(cv); return !Number.isNaN(a) && !Number.isNaN(b) && a < b }
+    default:             return true
+  }
+}
+
+/**
+ * Returns true if the operation's runConditions are satisfied (or absent).
+ */
+function shouldRunOperation(operation: SQLOperation, responses: Response[]): boolean {
+  const { runConditions, runConditionsOperator } = operation
+  if (!runConditions || runConditions.length === 0) return true
+  const op = runConditionsOperator ?? 'AND'
+  if (op === 'OR') return runConditions.some((rc) => evalRunCondition(rc, responses))
+  return runConditions.every((rc) => evalRunCondition(rc, responses))
+}
+
+/**
  * Generates SQL statement for a single operation
  */
 function generateOperationSQL(
@@ -269,9 +298,9 @@ export function generateSQL(submission: Submission, flow: OnboardingFlow): strin
   // New multi-operation support
   if (flow.sqlOperations && flow.sqlOperations.length > 0) {
     const sortedOperations = [...flow.sqlOperations].sort((a, b) => a.order - b.order)
-    const sqlStatements = sortedOperations.map((operation) =>
-      generateOperationSQL(operation, responses, flow)
-    )
+    const sqlStatements = sortedOperations
+      .filter((operation) => shouldRunOperation(operation, responses))
+      .map((operation) => generateOperationSQL(operation, responses, flow))
     return sqlStatements.join('\n\n')
   }
 

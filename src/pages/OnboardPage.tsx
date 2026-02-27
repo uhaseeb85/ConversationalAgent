@@ -281,38 +281,34 @@ Be warm and concise. Do not add unrelated commentary.`
     if (!flow) return
 
     setIsComplete(true)
-    setIsTyping(true)
 
-    setTimeout(async () => {
-      const completionText = flow.completionMessage || 
-        'Thank you! Your information has been collected successfully.'
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          type: 'bot',
-          content: completionText,
-        },
-      ])
-      setIsTyping(false)
+    const completionText = flow.completionMessage || 
+      'Thank you! Your information has been collected successfully.'
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        type: 'bot',
+        content: completionText,
+      },
+    ])
 
-      // Save submission
-      const submission: Submission = {
-        id: generateId(),
-        flowId: flow.id,
-        flowName: flow.name,
-        responses: finalResponses,
-        startedAt,
-        completedAt: new Date(),
-        status: 'pending' as const,
-      }
+    // Save submission
+    const submission: Submission = {
+      id: generateId(),
+      flowId: flow.id,
+      flowName: flow.name,
+      responses: finalResponses,
+      startedAt,
+      completedAt: new Date(),
+      status: 'pending' as const,
+    }
 
-      // Generate SQL
-      const sql = generateSQL(submission, flow)
-      setGeneratedSQL(sql)
-      setCompletedSubmission(submission)
+    // Generate SQL
+    const sql = generateSQL(submission, flow)
+    setGeneratedSQL(sql)
+    setCompletedSubmission(submission)
 
-      await addSubmission(submission)
-    }, 800)
+    await addSubmission(submission)
   }
 
   const renderInput = (question: Question) => {
@@ -326,7 +322,7 @@ Be warm and concise. Do not add unrelated commentary.`
             type={question.type === 'email' ? 'email' : question.type === 'phone' ? 'tel' : 'text'}
             value={currentValue as string}
             onChange={(e) => setCurrentValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmitAnswer()}
             placeholder={question.placeholder || 'Type your answer...'}
             className="flex-1"
           />
@@ -339,7 +335,7 @@ Be warm and concise. Do not add unrelated commentary.`
             type="number"
             value={currentValue as string}
             onChange={(e) => setCurrentValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmitAnswer()}
             placeholder={question.placeholder || 'Enter a number...'}
             className="flex-1"
           />
@@ -360,7 +356,13 @@ Be warm and concise. Do not add unrelated commentary.`
         return (
           <Select
             value={currentValue as string}
-            onChange={(e) => setCurrentValue(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value
+              if (val) {
+                setCurrentValue(val)
+                handleSubmitAnswer(val)
+              }
+            }}
             className="flex-1"
           >
             <option value="">Select an option...</option>
@@ -528,6 +530,7 @@ Be warm and concise. Do not add unrelated commentary.`
                     // Find the question index for the previous response
                     const prevQIdx = flow.questions.findIndex((q) => q.id === lastResponse.questionId)
                     if (prevQIdx >= 0) {
+                      setValidationError(null)
                       // Remove last user+bot messages from chat
                       setChatMessages((prev) => {
                         const msgs = [...prev]
@@ -556,7 +559,7 @@ Be warm and concise. Do not add unrelated commentary.`
                 </Button>
               )}
               <div className="flex-1">{renderInput(currentQuestion)}</div>
-              {currentQuestion.type !== 'yes-no' && (
+              {currentQuestion.type !== 'yes-no' && currentQuestion.type !== 'single-select' && (
                 <Button onClick={() => handleSubmitAnswer()} size="lg" className="px-8">
                   Advance
                 </Button>
