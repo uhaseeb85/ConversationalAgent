@@ -104,21 +104,21 @@ export function HomePage() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Hero Section */}
-      <div className="text-center mb-16 py-12">
-        <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-sm mb-6">
+      <div className="text-center mb-10 sm:mb-16 py-8 sm:py-12">
+        <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-sm mb-4 sm:mb-6">
           <MessageSquare className="h-4 w-4 mr-2" />
           Conversational Customer Onboarding
         </div>
-        <h1 className="text-5xl font-bold mb-4">
+        <h1 className="text-3xl sm:text-5xl font-bold mb-4">
           Onboard customers with{' '}
           <span className="bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-300 dark:to-slate-400 bg-clip-text text-transparent">
             intelligent conversations
           </span>
         </h1>
-        <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-8">
+        <p className="text-muted-foreground sm:text-lg max-w-2xl mx-auto mb-6 sm:mb-8">
           Create customizable question flows, collect customer information through a friendly chat interface, and generate SQL statements for seamless system integration.
         </p>
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <Link to="/flows/new">
             <Button size="lg" className="shadow-lg shadow-primary/20">
               <Plus className="h-5 w-5 mr-2" />

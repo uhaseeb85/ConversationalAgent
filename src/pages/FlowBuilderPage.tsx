@@ -133,21 +133,24 @@ export function FlowBuilderPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-6 flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate('/')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-muted-foreground">
-            {id ? 'Edit Flow' : 'Create Flow'}
-          </h1>
-          <p className="text-sm text-muted-foreground">Build your onboarding questionnaire</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={() => navigate('/')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-muted-foreground">
+              {id ? 'Edit Flow' : 'Create Flow'}
+            </h1>
+            <p className="text-sm text-muted-foreground">Build your onboarding questionnaire</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleExportFlow}>
             <Download className="h-4 w-4 mr-2" />
-            Export JSON
+            <span className="hidden sm:inline">Export JSON</span>
+            <span className="sm:hidden">Export</span>
           </Button>
           <Button onClick={handleSave} size="lg" className="shadow-lg shadow-primary/20">
             <Save className="h-4 w-4 mr-2" />
@@ -157,8 +160,8 @@ export function FlowBuilderPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-6">
+      <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 min-w-max">
           <button
             onClick={() => setActiveTab('details')}
             className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -248,7 +251,7 @@ export function FlowBuilderPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="welcomeMessage">Welcome Message</Label>
                     <Textarea
@@ -369,7 +372,7 @@ export function FlowBuilderPage() {
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs">Operation Type</Label>
                       <Select
@@ -416,7 +419,7 @@ export function FlowBuilderPage() {
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Column Mappings</Label>
                       {op.columnMappings.map((cm, cmIdx) => (
-                        <div key={cmIdx} className="grid grid-cols-3 gap-2 items-end">
+                        <div key={cmIdx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:items-end">
                           <div className="space-y-1">
                             <Label className="text-xs">Question</Label>
                             <Select
@@ -489,7 +492,7 @@ export function FlowBuilderPage() {
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">WHERE Conditions</Label>
                       {op.conditions.map((cond, cIdx) => (
-                        <div key={cond.id ?? cIdx} className="grid grid-cols-5 gap-2 items-end">
+                        <div key={cond.id ?? cIdx} className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:items-end">
                           <div className="space-y-1">
                             <Label className="text-xs">Column</Label>
                             <Input
@@ -636,7 +639,7 @@ export function FlowBuilderPage() {
                       )}
                     </div>
                     {(op.runConditions ?? []).map((rc, rcIdx) => (
-                      <div key={rc.id ?? rcIdx} className="grid grid-cols-4 gap-2 items-end">
+                      <div key={rc.id ?? rcIdx} className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:items-end">
                         <div className="space-y-1">
                           <Label className="text-xs">Question</Label>
                           <Select

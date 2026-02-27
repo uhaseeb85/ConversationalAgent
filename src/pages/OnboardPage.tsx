@@ -452,15 +452,15 @@ Be warm and concise. Do not add unrelated commentary.`
   const currentQuestion = flow.questions[currentQuestionIndex]
 
   return (
-    <div className="max-w-4xl mx-auto px-4">
-      <div className="bg-card rounded-xl shadow-lg overflow-hidden border border-border">
-        <div className="border-b bg-card p-4 flex items-center justify-between">
+    <div className="max-w-4xl mx-auto px-0 sm:px-4">
+      <div className="bg-card rounded-none sm:rounded-xl shadow-lg overflow-hidden border-y sm:border border-border">
+        <div className="border-b bg-card p-3 sm:p-4 flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            <span className="hidden sm:inline">Back</span>
           </Button>
           <div className="text-center flex-1">
-            <h1 className="text-xl font-semibold">{flow.name}</h1>
+            <h1 className="text-base sm:text-xl font-semibold truncate px-2">{flow.name}</h1>
             {!isComplete && currentQuestion && (
               <p className="text-xs text-muted-foreground mt-0.5">
                 Question {responses.length + 1} of {getVisibleQuestionCount(flow, responses)}
@@ -483,7 +483,7 @@ Be warm and concise. Do not add unrelated commentary.`
           </div>
         )}
 
-        <div className="h-[500px] overflow-y-auto p-6 space-y-4 bg-muted/30">
+        <div className="h-[60vh] min-h-[300px] max-h-[600px] overflow-y-auto p-4 sm:p-6 space-y-4 bg-muted/30">
           <AnimatePresence>
             {chatMessages.map((message) => (
               <motion.div
@@ -500,7 +500,7 @@ Be warm and concise. Do not add unrelated commentary.`
                   </div>
                 )}
                 <div
-                  className={`max-w-[70%] rounded-2xl px-4 py-3 ${
+                  className={`max-w-[80%] sm:max-w-[70%] rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base ${
                     message.type === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-foreground'
@@ -537,8 +537,8 @@ Be warm and concise. Do not add unrelated commentary.`
         </div>
 
         {!isComplete && currentQuestion && !isTyping && (
-          <div className="border-t p-4 bg-card">
-            <div className="flex items-center gap-3">
+          <div className="border-t p-3 sm:p-4 bg-card">
+            <div className="flex items-center gap-2 sm:gap-3">
               {responses.length > 0 && (
                 <Button
                   variant="ghost"
@@ -645,7 +645,7 @@ Be warm and concise. Do not add unrelated commentary.`
                   const question = flow.questions.find((q) => q.id === response.questionId)
                   if (!question) return null
                   return (
-                    <div key={response.questionId} className="grid grid-cols-2 text-sm">
+                    <div key={response.questionId} className="grid grid-cols-1 sm:grid-cols-2 text-sm gap-0.5 sm:gap-0">
                       <div className="text-muted-foreground">{question.label}</div>
                       <div className="font-medium">
                         {Array.isArray(response.value)
@@ -659,7 +659,7 @@ Be warm and concise. Do not add unrelated commentary.`
             </div>
 
             {/* Actions */}
-            <div className="flex justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => navigate('/')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Home
