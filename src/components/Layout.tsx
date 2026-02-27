@@ -112,7 +112,7 @@ export function Layout() {
         )}
       </nav>
 
-      <main className="container mx-auto px-4 py-6 sm:py-8"><Outlet /></main>
+      <main className="container mx-auto px-4 py-4 sm:py-6 lg:py-8"><Outlet /></main>
     </div>
   )
 }

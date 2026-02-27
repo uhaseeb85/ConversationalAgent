@@ -103,8 +103,8 @@ export function SettingsPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-300 dark:to-slate-400 bg-clip-text text-transparent flex items-center gap-3">
+      <div className="mb-6">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1 bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-300 dark:to-slate-400 bg-clip-text text-transparent flex items-center gap-3">
           <Settings className="h-9 w-9 text-primary" />
           App Settings
         </h1>
