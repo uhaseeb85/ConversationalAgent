@@ -95,12 +95,15 @@ export async function initStore(): Promise<void> {
     }
   }
 
-  // Seed demo flow if no flows exist at all
-  if (flows.length === 0) {
-    const demo = createDemoFlow()
-    await putFlow(demo)
+  // Always sync the demo flow to the latest version from code
+  const demo = createDemoFlow()
+  const existingDemoIdx = flows.findIndex((f) => f.id === DEMO_FLOW_ID)
+  if (existingDemoIdx >= 0) {
+    flows[existingDemoIdx] = demo
+  } else {
     flows.push(demo)
   }
+  await putFlow(demo)
 
   useStore.setState({ flows, submissions })
 }
