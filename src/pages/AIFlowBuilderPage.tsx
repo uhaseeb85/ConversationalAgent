@@ -27,6 +27,45 @@ const STEPS = [
   { id: 5, title: 'Review & Configure', description: 'Final review and settings' },
 ]
 
+// ── Demo Mode content ──────────────────────────────────────────────────────
+const DEMO_PURPOSE =
+  'Collect new employee information including full name, email, department, job title, start date, phone number, and employment type to populate the employees table in our HR database.'
+
+const DEMO_QUESTIONS: Question[] = [
+  { id: 'demo-ai-q1', type: 'text',          label: 'What is your full name?',                placeholder: 'Jane Smith',                  helpText: 'Your legal name as it appears on your ID.', required: true,  validationRules: [{ type: 'required', message: 'Full name is required' }, { type: 'min-length', value: 2, message: 'Name must be at least 2 characters' }], sqlColumnName: 'full_name',       tableName: 'employees', order: 0 },
+  { id: 'demo-ai-q2', type: 'email',         label: 'What is your work email address?',       placeholder: 'jane@company.com',            helpText: 'Your company-issued email address.',        required: true,  validationRules: [{ type: 'required', message: 'Email is required' }, { type: 'pattern', value: '^[^@]+@[^@]+\\.[^@]+$', message: 'Enter a valid email' }],           sqlColumnName: 'email',           tableName: 'employees', order: 1 },
+  { id: 'demo-ai-q3', type: 'single-select', label: 'Which department will you be joining?',  placeholder: undefined,                     helpText: 'Select the department you are assigned to.', required: true, validationRules: [{ type: 'required', message: 'Department is required' }],                                                                                                sqlColumnName: 'department',      tableName: 'employees', order: 2, options: ['Engineering', 'Marketing', 'Sales', 'Human Resources', 'Finance', 'Operations'] },
+  { id: 'demo-ai-q4', type: 'text',          label: 'What is your job title?',                placeholder: 'e.g. Software Engineer',      helpText: 'Your official job title.',                  required: true,  validationRules: [{ type: 'required', message: 'Job title is required' }],                                                                                               sqlColumnName: 'job_title',       tableName: 'employees', order: 3 },
+  { id: 'demo-ai-q5', type: 'date',          label: 'What is your start date?',               placeholder: undefined,                     helpText: 'The date you officially begin employment.',  required: true,  validationRules: [{ type: 'required', message: 'Start date is required' }],                                                                                              sqlColumnName: 'start_date',      tableName: 'employees', order: 4 },
+  { id: 'demo-ai-q6', type: 'phone',         label: 'What is your phone number?',             placeholder: '+1 (555) 000-0000',           helpText: 'A phone number where we can reach you.',    required: false, validationRules: [],                                                                                                                                                sqlColumnName: 'phone',           tableName: 'employees', order: 5 },
+  { id: 'demo-ai-q7', type: 'single-select', label: 'What is your employment type?',          placeholder: undefined,                     helpText: 'Select the type of employment.',            required: true,  validationRules: [{ type: 'required', message: 'Employment type is required' }],                                                                                         sqlColumnName: 'employment_type', tableName: 'employees', order: 6, options: ['Full-time', 'Part-time', 'Contract', 'Intern'] },
+]
+
+const DEMO_SQL_OPERATIONS: SQLOperation[] = [
+  {
+    id: 'demo-ai-op1',
+    operationType: 'INSERT',
+    tableName: 'employees',
+    label: 'Register New Employee',
+    columnMappings: [
+      { questionId: 'demo-ai-q1', columnName: 'full_name' },
+      { questionId: 'demo-ai-q2', columnName: 'email' },
+      { questionId: 'demo-ai-q3', columnName: 'department' },
+      { questionId: 'demo-ai-q4', columnName: 'job_title' },
+      { questionId: 'demo-ai-q5', columnName: 'start_date' },
+      { questionId: 'demo-ai-q6', columnName: 'phone' },
+      { questionId: 'demo-ai-q7', columnName: 'employment_type' },
+    ],
+    conditions: [],
+    order: 0,
+  },
+]
+
+const DEMO_FLOW_NAME = 'New Employee Onboarding'
+const DEMO_FLOW_DESCRIPTION = 'Collects new hire information and inserts a record into the employees table.'
+const DEMO_WELCOME = 'Welcome! This flow will collect your information to get you set up in our system. It should only take a minute.'
+const DEMO_COMPLETION = 'Thanks! Your information has been submitted. HR will be in touch shortly.'
+
 export function AIFlowBuilderPage() {
   const navigate = useNavigate()
   const { addFlow, flows } = useStore()
@@ -52,6 +91,7 @@ export function AIFlowBuilderPage() {
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [aiEnabled, setAiEnabled] = useState(false)
+  const [isDemoMode, setIsDemoMode] = useState(false)
 
   // Check AI configuration on mount
   useEffect(() => {
@@ -89,6 +129,13 @@ export function AIFlowBuilderPage() {
       return
     }
 
+    // Demo mode: use pre-built questions instead of calling AI
+    if (isDemoMode) {
+      setQuestions(DEMO_QUESTIONS)
+      setCurrentStep(4)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -119,6 +166,13 @@ export function AIFlowBuilderPage() {
 
     if (!schema) {
       setError('Schema not loaded')
+      return
+    }
+
+    // Demo mode: use pre-built SQL operations
+    if (isDemoMode) {
+      setSqlOperations(DEMO_SQL_OPERATIONS)
+      setCurrentStep(5)
       return
     }
 
@@ -180,6 +234,22 @@ export function AIFlowBuilderPage() {
       setLoading(true)
       setError(null)
 
+      // In demo mode the questions/operations use fixed IDs — remap to fresh ones before saving
+      let finalQuestions = questions
+      let finalOperations = sqlOperations
+      if (isDemoMode) {
+        const idMap = new Map(questions.map((q) => [q.id, generateId()]))
+        finalQuestions = questions.map((q) => ({ ...q, id: idMap.get(q.id) ?? generateId() }))
+        finalOperations = sqlOperations.map((op) => ({
+          ...op,
+          id: generateId(),
+          columnMappings: op.columnMappings.map((cm) => ({
+            ...cm,
+            questionId: idMap.get(cm.questionId) ?? cm.questionId,
+          })),
+        }))
+      }
+
       const now = new Date()
       const flow: OnboardingFlow = {
         id: generateId(),
@@ -187,11 +257,11 @@ export function AIFlowBuilderPage() {
         description: flowDescription,
         welcomeMessage: welcomeMessage || undefined,
         completionMessage: completionMessage || undefined,
-        questions,
-        sqlOperations,
+        questions: finalQuestions,
+        sqlOperations: finalOperations,
         isActive,
         isPublic,
-        tableName: sqlOperations[0]?.tableName || '', // Legacy field
+        tableName: finalOperations[0]?.tableName || '', // Legacy field
         createdAt: now,
         updatedAt: now,
       }
@@ -255,15 +325,37 @@ export function AIFlowBuilderPage() {
     }
   })()
 
-  if (!aiEnabled) {
+  if (!aiEnabled && !isDemoMode) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <Card className="max-w-2xl mx-auto p-8 text-center">
-          <h1 className="text-2xl font-bold mb-4">AI Not Enabled</h1>
-          <p className="text-gray-600 mb-6">
-            The AI Flow Builder requires AI to be enabled. Please configure your AI settings first.
+        <Card className="max-w-2xl mx-auto p-8 text-center space-y-6">
+          <h1 className="text-2xl font-bold">AI Flow Builder</h1>
+          <p className="text-muted-foreground">
+            The AI Flow Builder uses an AI model to generate questions and SQL mappings from a plain-text
+            description. You can enable AI in Settings, or explore the builder with sample demo content right now.
           </p>
-          <Button onClick={() => navigate('/settings')}>Go to Settings</Button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              onClick={() => {
+                setIsDemoMode(true)
+                setPurpose(DEMO_PURPOSE)
+                setFlowName(DEMO_FLOW_NAME)
+                setFlowDescription(DEMO_FLOW_DESCRIPTION)
+                setWelcomeMessage(DEMO_WELCOME)
+                setCompletionMessage(DEMO_COMPLETION)
+              }}
+              className="flex-1 sm:flex-initial"
+            >
+              🎭 Try Demo Mode
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/settings')} className="flex-1 sm:flex-initial">
+              ⚙️ Enable AI in Settings
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Demo mode pre-fills all steps with a realistic &ldquo;New Employee Onboarding&rdquo; example so you
+            can explore the full wizard without an AI connection.
+          </p>
         </Card>
       </div>
     )
@@ -275,6 +367,19 @@ export function AIFlowBuilderPage() {
         <h1 className="text-3xl font-bold mb-2">AI Flow Builder</h1>
         <p className="text-gray-600">Create onboarding flows with AI assistance</p>
       </div>
+
+      {/* Demo mode banner */}
+      {isDemoMode && (
+        <div className="mb-6 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-center justify-between gap-4">
+          <div className="text-sm text-amber-800">
+            <strong>🎭 Demo Mode</strong> — AI is not enabled. Each &ldquo;Generate&rdquo; step is pre-filled with a sample
+            &ldquo;New Employee Onboarding&rdquo; flow. You can edit any content and save the result as a real flow.
+          </div>
+          <Button variant="outline" size="sm" onClick={() => navigate('/settings')} className="shrink-0 text-amber-800 border-amber-400 hover:bg-amber-100">
+            Enable AI
+          </Button>
+        </div>
+      )}
 
       {/* Progress Indicator */}
       <div className="mb-8">
@@ -440,7 +545,7 @@ export function AIFlowBuilderPage() {
             {questions.length === 0 ? (
               <div className="text-center py-8">
                 <Button onClick={handleGenerateQuestions} disabled={loading}>
-                  {loading ? 'Generating...' : '🪄 Generate Questions with AI'}
+                  {loading ? 'Generating...' : isDemoMode ? '🎭 Load Demo Questions' : '🪄 Generate Questions with AI'}
                 </Button>
               </div>
             ) : (
@@ -448,7 +553,7 @@ export function AIFlowBuilderPage() {
                 <div className="mb-4 flex justify-between items-center">
                   <p className="text-sm text-gray-600">{questions.length} questions generated</p>
                   <Button onClick={handleGenerateQuestions} variant="outline" disabled={loading}>
-                    Regenerate
+                    {isDemoMode ? 'Reload Demo' : 'Regenerate'}
                   </Button>
                 </div>
 
@@ -501,7 +606,7 @@ export function AIFlowBuilderPage() {
             {sqlOperations.length === 0 ? (
               <div className="text-center py-8">
                 <Button onClick={handleGenerateSQLOperations} disabled={loading}>
-                  {loading ? 'Generating...' : '🪄 Generate SQL Mappings'}
+                  {loading ? 'Generating...' : isDemoMode ? '🎭 Load Demo SQL Mappings' : '🪄 Generate SQL Mappings'}
                 </Button>
               </div>
             ) : (
@@ -509,7 +614,7 @@ export function AIFlowBuilderPage() {
                 <div className="mb-4 flex justify-between items-center">
                   <p className="text-sm text-gray-600">{sqlOperations.length} operations generated</p>
                   <Button onClick={handleGenerateSQLOperations} variant="outline" disabled={loading}>
-                    Regenerate
+                    {isDemoMode ? 'Reload Demo' : 'Regenerate'}
                   </Button>
                 </div>
 
