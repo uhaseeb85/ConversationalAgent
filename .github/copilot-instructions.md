@@ -133,6 +133,7 @@ All routes are prefixed `/api/`.
 
 ## Coding Conventions
 
+- **Git workflow**: Commit and push changes manually. Avoid automatic commits or pushes.
 - **TypeScript strict mode** is enabled — avoid `any`; use types from `src/types/index.ts`
 - **Server DB access** always goes through the helpers in `server/lib/app-db.ts` (`query`, `queryOne`, `insert`) — never use `getSqlite()` or `getPg()` directly in routes
 - **Auth middleware**: import `requireAuth` and `AuthRequest` from `server/middleware/requireAuth.ts`; access the authenticated user via `req.user`
