@@ -72,7 +72,7 @@ function SortableQuestionItem({
   }
 
   const selectedTable = question.tableName && userDefinedTables
-    ? userDefinedTables.find((t) => t.id === question.tableName)
+    ? userDefinedTables.find((t) => t.name === question.tableName)
     : null
 
   return (
@@ -140,17 +140,17 @@ function SortableQuestionItem({
                     <Select
                       value={question.tableName || ''}
                       onChange={(e) => {
-                        const tableId = e.target.value
-                        if (tableId) {
+                        const tableName = e.target.value
+                        if (tableName) {
                           // Auto-select first column if available
-                          const table = userDefinedTables.find((t) => t.id === tableId)
+                          const table = userDefinedTables.find((t) => t.name === tableName)
                           if (table && table.columns.length > 0) {
                             onUpdate(question.id, {
-                              tableName: tableId,
+                              tableName: tableName,
                               sqlColumnName: table.columns[0].name,
                             })
                           } else {
-                            onUpdate(question.id, { tableName: tableId, sqlColumnName: '' })
+                            onUpdate(question.id, { tableName: tableName, sqlColumnName: '' })
                           }
                         } else {
                           onUpdate(question.id, { tableName: undefined })
@@ -159,7 +159,7 @@ function SortableQuestionItem({
                     >
                       <option value="">No specific table</option>
                       {userDefinedTables.map((table) => (
-                        <option key={table.id} value={table.id}>
+                        <option key={table.id} value={table.name}>
                           {table.name}
                         </option>
                       ))}

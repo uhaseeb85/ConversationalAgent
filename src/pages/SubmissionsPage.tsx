@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { generateSQL } from '@/lib/sql-generator'
-import { Copy, Check, Eye, Database, Calendar, FileCode } from 'lucide-react'
+import { Copy, Check, Eye, Database, Calendar, FileCode, Trash2, Download } from 'lucide-react'
 import { format } from 'date-fns'
 
 export function SubmissionsPage() {
@@ -14,6 +14,7 @@ export function SubmissionsPage() {
   const submissions = useStore((state) => state.submissions)
   const flows = useStore((state) => state.flows)
   const updateSubmission = useStore((state) => state.updateSubmission)
+  const deleteSubmission = useStore((state) => state.deleteSubmission)
 
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
   const [generatedSQL, setGeneratedSQL] = useState<string>('')
@@ -66,15 +67,43 @@ export function SubmissionsPage() {
     (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
   )
 
+  const handleExportSubmissions = () => {
+    const dataStr = JSON.stringify(sortedSubmissions, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `submissions-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleDeleteSubmission = (submissionId: string) => {
+    if (!confirm('Are you sure you want to delete this submission?')) return
+    deleteSubmission(submissionId)
+    if (selectedSubmission?.id === submissionId) {
+      setSelectedSubmission(null)
+      setGeneratedSQL('')
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-          Submissions
-        </h1>
-        <p className="text-muted-foreground">
-          View collected customer data and generated SQL statements
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+            Submissions
+          </h1>
+          <p className="text-muted-foreground">
+            View collected customer data and generated SQL statements
+          </p>
+        </div>
+        {sortedSubmissions.length > 0 && (
+          <Button variant="outline" onClick={handleExportSubmissions}>
+            <Download className="h-4 w-4 mr-2" />
+            Export JSON
+          </Button>
+        )}
       </div>
 
       <div className="mb-6 flex space-x-2">
@@ -157,10 +186,22 @@ export function SubmissionsPage() {
                     <span className="text-sm text-muted-foreground">
                       {submission.responses.length} responses
                     </span>
-                    <Button variant="ghost" size="sm">
-                      <Eye className="h-4 w-4 mr-1" />
-                      View
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm">
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteSubmission(submission.id)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

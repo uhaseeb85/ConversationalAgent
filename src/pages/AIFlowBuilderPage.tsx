@@ -16,6 +16,7 @@ import { generateQuestionsFromPurpose, generateSQLOperations, validateOperationS
 import { loadAIConfig } from '../lib/ai-client'
 import { generateSQL } from '../lib/sql-generator'
 import { useStore } from '../lib/store'
+import { generateId } from '../lib/utils'
 import type { Question, SQLOperation, OnboardingFlow } from '../types'
 
 const STEPS = [
@@ -28,7 +29,7 @@ const STEPS = [
 
 export function AIFlowBuilderPage() {
   const navigate = useNavigate()
-  const { addFlow } = useStore()
+  const { addFlow, flows } = useStore()
 
   // Wizard state
   const [currentStep, setCurrentStep] = useState(1)
@@ -66,7 +67,9 @@ export function AIFlowBuilderPage() {
   async function loadSchema() {
     try {
       setLoading(true)
-      const context = await buildSchemaContext()
+      // Collect user-defined tables from all existing flows
+      const allUserTables = flows.flatMap((f) => f.userDefinedTables ?? [])
+      const context = await buildSchemaContext(allUserTables.length > 0 ? allUserTables : undefined)
       setSchema(context)
     } catch (err) {
       setError(`Failed to load schema: ${err instanceof Error ? err.message : 'Unknown error'}`)
@@ -177,7 +180,9 @@ export function AIFlowBuilderPage() {
       setLoading(true)
       setError(null)
 
-      const flow: Partial<OnboardingFlow> = {
+      const now = new Date()
+      const flow: OnboardingFlow = {
+        id: generateId(),
         name: flowName,
         description: flowDescription,
         welcomeMessage: welcomeMessage || undefined,
@@ -187,9 +192,11 @@ export function AIFlowBuilderPage() {
         isActive,
         isPublic,
         tableName: sqlOperations[0]?.tableName || '', // Legacy field
+        createdAt: now,
+        updatedAt: now,
       }
 
-      await addFlow(flow as OnboardingFlow)
+      addFlow(flow)
       navigate('/') // Redirect to home/flows list
     } catch (err) {
       setError(`Failed to save flow: ${err instanceof Error ? err.message : 'Unknown error'}`)

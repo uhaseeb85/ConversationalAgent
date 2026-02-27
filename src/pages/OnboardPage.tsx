@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { CheckCircle2, Bot, User, Copy, ArrowLeft } from 'lucide-react'
+import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw } from 'lucide-react'
 import { streamChatCompletion, loadAIConfig, AIConfig } from '@/lib/ai-client'
 
 
@@ -65,6 +65,14 @@ export function OnboardPage() {
       inputRef.current?.focus()
     }
   }, [currentQuestionIndex, isTyping, isComplete])
+
+  // Initialize currentValue based on question type when question changes
+  useEffect(() => {
+    if (!flow) return
+    const q = flow.questions[currentQuestionIndex]
+    if (!q) return
+    setCurrentValue(q.type === 'multi-select' ? [] : '')
+  }, [currentQuestionIndex, flow])
 
   const shouldShowQuestion = (question: Question, existingResponses: Response[]): boolean => {
     if (!question.conditionalLogic) return true
@@ -161,22 +169,25 @@ Be warm and concise. Do not add unrelated commentary.`
     }
   }
 
-  const handleSubmitAnswer = () => {
+  const handleSubmitAnswer = (overrideValue?: string | string[]) => {
     if (!flow) return
 
     const currentQuestion = flow.questions[currentQuestionIndex]
     if (!currentQuestion) return
 
+    const valueToSubmit = overrideValue !== undefined ? overrideValue : currentValue
+
     // Validation
-    if (currentQuestion.required && !currentValue) {
+    const isEmpty = Array.isArray(valueToSubmit) ? valueToSubmit.length === 0 : !valueToSubmit
+    if (currentQuestion.required && isEmpty) {
       alert('This question is required')
       return
     }
 
     // Add user response to chat
-    const displayValue = Array.isArray(currentValue)
-      ? currentValue.join(', ')
-      : currentValue
+    const displayValue = Array.isArray(valueToSubmit)
+      ? valueToSubmit.join(', ')
+      : valueToSubmit
 
     setChatMessages((prev) => [
       ...prev,
@@ -186,12 +197,11 @@ Be warm and concise. Do not add unrelated commentary.`
     // Save response
     const newResponse: Response = {
       questionId: currentQuestion.id,
-      value: currentValue || null,
+      value: valueToSubmit || null,
     }
 
     const updatedResponses = [...responses, newResponse]
     setResponses(updatedResponses)
-    setCurrentValue('')
 
     // Show next question
     setTimeout(() => {
@@ -323,14 +333,14 @@ Be warm and concise. Do not add unrelated commentary.`
           <div className="flex space-x-2">
             <Button
               variant={currentValue === 'yes' ? 'default' : 'outline'}
-              onClick={() => setCurrentValue('yes')}
+              onClick={() => handleSubmitAnswer('yes')}
               className="flex-1"
             >
               Yes
             </Button>
             <Button
               variant={currentValue === 'no' ? 'default' : 'outline'}
-              onClick={() => setCurrentValue('no')}
+              onClick={() => handleSubmitAnswer('no')}
               className="flex-1"
             >
               No
@@ -351,22 +361,37 @@ Be warm and concise. Do not add unrelated commentary.`
 
   return (
     <div className="max-w-4xl mx-auto px-4">
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
-        <div className="border-b bg-white p-4 flex items-center justify-between">
+      <div className="bg-card rounded-xl shadow-lg overflow-hidden border border-border">
+        <div className="border-b bg-card p-4 flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
           <div className="text-center flex-1">
             <h1 className="text-xl font-semibold">{flow.name}</h1>
-            {!isComplete && (
+            {!isComplete && currentQuestion && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Question {responses.length + 1} of {flow.questions.length}
+              </p>
+            )}
+            {isComplete && (
               <p className="text-xs text-muted-foreground mt-0.5">Complete</p>
             )}
           </div>
           <div className="w-16"></div>
         </div>
 
-        <div className="h-[500px] overflow-y-auto p-6 space-y-4 bg-gray-50">
+        {/* Progress bar */}
+        {!isComplete && (
+          <div className="h-1 bg-muted">
+            <div
+              className="h-1 bg-primary transition-all duration-500"
+              style={{ width: `${Math.round((responses.length / flow.questions.length) * 100)}%` }}
+            />
+          </div>
+        )}
+
+        <div className="h-[500px] overflow-y-auto p-6 space-y-4 bg-muted/30">
           <AnimatePresence>
             {chatMessages.map((message, index) => (
               <motion.div
@@ -385,8 +410,8 @@ Be warm and concise. Do not add unrelated commentary.`
                 <div
                   className={`max-w-[70%] rounded-2xl px-4 py-3 ${
                     message.type === 'user'
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 text-gray-900'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-foreground'
                   }`}
                 >
                   {message.content}
@@ -420,28 +445,62 @@ Be warm and concise. Do not add unrelated commentary.`
         </div>
 
         {!isComplete && currentQuestion && !isTyping && (
-          <div className="border-t p-4 bg-white">
+          <div className="border-t p-4 bg-card">
             <div className="flex items-center gap-3">
+              {responses.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    // Remove last response
+                    const prevResponses = responses.slice(0, -1)
+                    const lastResponse = responses[responses.length - 1]
+                    setResponses(prevResponses)
+
+                    // Find the question index for the previous response
+                    const prevQIdx = flow.questions.findIndex((q) => q.id === lastResponse.questionId)
+                    if (prevQIdx >= 0) {
+                      // Remove last user+bot messages from chat
+                      setChatMessages((prev) => {
+                        const msgs = [...prev]
+                        // Remove from the end: last user message and the bot message before it
+                        let removed = 0
+                        for (let i = msgs.length - 1; i >= 0 && removed < 2; i--) {
+                          if (msgs[i].type === 'user' || (msgs[i].type === 'bot' && msgs[i].questionId === lastResponse.questionId)) {
+                            msgs.splice(i, 1)
+                            removed++
+                          }
+                        }
+                        return msgs
+                      })
+                      setCurrentQuestionIndex(prevQIdx)
+                      const prevValue = lastResponse.value
+                      if (Array.isArray(prevValue)) {
+                        setCurrentValue(prevValue)
+                      } else {
+                        setCurrentValue(prevValue != null ? String(prevValue) : '')
+                      }
+                    }
+                  }}
+                  title="Go back to previous question"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+              )}
               <div className="flex-1">{renderInput(currentQuestion)}</div>
-              {currentQuestion.type !== 'yes-no' && currentQuestion.type !== 'multi-select' && (
-                <Button onClick={handleSubmitAnswer} size="lg" className="px-8">
+              {currentQuestion.type !== 'yes-no' && (
+                <Button onClick={() => handleSubmitAnswer()} size="lg" className="px-8">
                   Advance
                 </Button>
               )}
-              {currentQuestion.type === 'multi-select' && (
-                <Button onClick={handleSubmitAnswer} size="lg" className="px-8">
-                  Advance
-                </Button>
-              )}
-              <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-                <User className="h-5  w-5 text-gray-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <User className="h-5 w-5 text-muted-foreground" />
               </div>
             </div>
             {!currentQuestion.required && (
               <button
                 onClick={() => {
-                  setCurrentValue('')
-                  handleSubmitAnswer()
+                  handleSubmitAnswer('')
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground mt-2"
               >
@@ -482,7 +541,7 @@ Be warm and concise. Do not add unrelated commentary.`
             </div>
 
             {/* Collected Information */}
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-muted rounded-lg p-4">
               <h3 className="font-medium text-sm mb-3">Collected Information</h3>
               <div className="space-y-2">
                 {completedSubmission.responses.map((response) => {

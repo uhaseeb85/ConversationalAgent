@@ -5,9 +5,16 @@ import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { loadAIConfig, saveAIConfig, chatCompletion, fetchOpenRouterModels, AI_PROVIDERS, type AIModel } from '@/lib/ai-client'
-import { Settings, Bot, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import { useStore } from '@/lib/store'
+import { Settings, Bot, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, RefreshCw, Download, Upload, Trash2, Database } from 'lucide-react'
 
 export function SettingsPage() {
+  // Store
+  const flows = useStore((s) => s.flows)
+  const submissions = useStore((s) => s.submissions)
+  const setFlows = useStore((s) => s.setFlows)
+  const setSubmissions = useStore((s) => s.setSubmissions)
+
   // AI settings
   const [aiConfig, setAiConfig] = useState(loadAIConfig)
   const [testingAI, setTestingAI] = useState(false)
@@ -257,6 +264,112 @@ export function SettingsPage() {
             <Button onClick={handleTestAI} disabled={testingAI || !aiConfig.baseUrl} variant="outline">
               {testingAI ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Bot className="h-4 w-4 mr-2" />}
               Test Connection
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ─── Data Management ────────────────────────────────── */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            Data Management
+          </CardTitle>
+          <CardDescription>
+            Export, import, or clear all locally stored data (flows &amp; submissions).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+            <Card className="p-4">
+              <div className="text-2xl font-bold">{flows.length}</div>
+              <div className="text-sm text-muted-foreground">Flows</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold">{submissions.length}</div>
+              <div className="text-sm text-muted-foreground">Submissions</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold">
+                {(() => {
+                  const bytes = (localStorage.getItem('ca_flows')?.length ?? 0) + (localStorage.getItem('ca_submissions')?.length ?? 0)
+                  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
+                })()}
+              </div>
+              <div className="text-sm text-muted-foreground">Storage Used</div>
+            </Card>
+          </div>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const data = { flows, submissions, exportedAt: new Date().toISOString() }
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `conversational-agent-backup-${new Date().toISOString().slice(0, 10)}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export All Data
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = '.json'
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = (ev) => {
+                    try {
+                      const data = JSON.parse(ev.target?.result as string)
+                      if (!Array.isArray(data.flows) || !Array.isArray(data.submissions)) {
+                        alert('Invalid backup file: missing flows or submissions arrays.')
+                        return
+                      }
+                      if (!confirm(`Import ${data.flows.length} flows and ${data.submissions.length} submissions? This will REPLACE all existing data.`)) return
+                      setFlows(data.flows)
+                      setSubmissions(data.submissions)
+                      localStorage.setItem('ca_flows', JSON.stringify(data.flows))
+                      localStorage.setItem('ca_submissions', JSON.stringify(data.submissions))
+                      alert('Data imported successfully!')
+                    } catch {
+                      alert('Invalid JSON file.')
+                    }
+                  }
+                  reader.readAsText(file)
+                }
+                input.click()
+              }}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import All Data
+            </Button>
+
+            <Button
+              variant="outline"
+              className="text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={() => {
+                if (!confirm('Are you sure? This will delete ALL flows and submissions permanently.')) return
+                if (!confirm('This action CANNOT be undone. Continue?')) return
+                setFlows([])
+                setSubmissions([])
+                localStorage.removeItem('ca_flows')
+                localStorage.removeItem('ca_submissions')
+                alert('All data cleared.')
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All Data
             </Button>
           </div>
         </CardContent>

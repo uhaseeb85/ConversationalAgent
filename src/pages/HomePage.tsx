@@ -42,12 +42,24 @@ export function HomePage() {
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
-        const imported = JSON.parse(ev.target?.result as string) as OnboardingFlow
+        const imported = JSON.parse(ev.target?.result as string)
+
+        // Validate required fields
+        if (
+          !imported ||
+          typeof imported !== 'object' ||
+          typeof imported.name !== 'string' ||
+          !Array.isArray(imported.questions)
+        ) {
+          alert('Invalid flow file: missing required fields (name, questions).')
+          return
+        }
+
         addFlow({
           ...imported,
           id: generateId(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
       } catch {
         alert('Invalid flow JSON file.')

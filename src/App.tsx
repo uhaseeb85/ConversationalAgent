@@ -8,6 +8,7 @@ import { AIFlowBuilderPage } from './pages/AIFlowBuilderPage'
 import { OnboardPage } from './pages/OnboardPage'
 import { SubmissionsPage } from './pages/SubmissionsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { initStore } from './lib/store'
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
             <Route path="/submissions" element={<SubmissionsPage />} />
             <Route path="/submissions/:id" element={<SubmissionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
       </Router>

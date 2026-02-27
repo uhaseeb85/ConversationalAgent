@@ -7,7 +7,7 @@ import { format } from 'date-fns'
  */
 export function validateSQLIdentifier(identifier: string): { valid: boolean; error?: string } {
   // Allow alphanumeric, underscore, period (for schema.table)
-  const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*(\.[ a-zA-Z_][a-zA-Z0-9_]*)?$/
+  const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$/
   if (!validPattern.test(identifier)) {
     return {
       valid: false,

@@ -53,7 +53,10 @@ export const useStore = create<AppStore>((set, get) => ({
   deleteFlow: (id: string) => {
     const flows = get().flows.filter((f) => f.id !== id)
     writeFlows(flows)
-    set({ flows })
+    // Cascade: delete submissions belonging to this flow
+    const submissions = get().submissions.filter((s) => s.flowId !== id)
+    writeSubmissions(submissions)
+    set({ flows, submissions })
   },
 
   addSubmission: (submission: Submission) => {
@@ -66,6 +69,12 @@ export const useStore = create<AppStore>((set, get) => ({
     const submissions = get().submissions.map((s) =>
       s.id === id ? { ...s, ...updates } : s
     )
+    writeSubmissions(submissions)
+    set({ submissions })
+  },
+
+  deleteSubmission: (id: string) => {
+    const submissions = get().submissions.filter((s) => s.id !== id)
     writeSubmissions(submissions)
     set({ submissions })
   },

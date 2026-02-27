@@ -141,6 +141,7 @@ export interface AppStore {
   deleteFlow: (id: string) => void
   addSubmission: (submission: Submission) => void
   updateSubmission: (id: string, submission: Partial<Submission>) => void
+  deleteSubmission: (id: string) => void
 }
 
 // DB schema types (used by DDL parser and schema importer)

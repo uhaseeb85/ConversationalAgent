@@ -62,14 +62,6 @@ export const AI_PROVIDERS: AIProvider[] = [
     defaultModel: 'gpt-4o-mini',
     description: 'OpenAI GPT models',
   },
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    baseUrl: 'https://api.anthropic.com/v1',
-    defaultApiKey: 'sk-ant-...',
-    defaultModel: 'claude-3-5-haiku-20241022',
-    description: 'Anthropic Claude models',
-  },
 ]
 
 const CONFIG_KEY = 'ai_config'
