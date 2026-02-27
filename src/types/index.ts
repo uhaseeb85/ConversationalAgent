@@ -133,8 +133,8 @@ export interface Submission {
   flowId: string
   flowName: string
   responses: Response[]
-  startedAt: Date
-  completedAt: Date
+  startedAt: Date | string
+  completedAt: Date | string
   status: SubmissionStatus
   generatedSQL?: string
   executedAt?: string | null

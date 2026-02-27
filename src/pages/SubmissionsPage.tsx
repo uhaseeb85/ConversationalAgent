@@ -55,8 +55,8 @@ export function SubmissionsPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const handleStatusChange = async (submissionId: string, status: SubmissionStatus) => {
-    await updateSubmission(submissionId, { status })
+  const handleStatusChange = (submissionId: string, status: SubmissionStatus) => {
+    updateSubmission(submissionId, { status })
   }
 
   const filteredSubmissions = filter === 'all' 

@@ -206,7 +206,7 @@ export function createDemoFlow(): OnboardingFlow {
     operationType: 'INSERT',
     tableName: 'oauth_clients',
     label: 'Register New OAuth Client',
-    columnMappings: sharedMappings,
+    columnMappings: [...sharedMappings],
     conditions: [],
     runConditions: [{ id: 'demo-rc-insert', questionId: qOperation, operator: 'equals', value: 'Register new client' }],
     runConditionsOperator: 'AND',
@@ -218,7 +218,7 @@ export function createDemoFlow(): OnboardingFlow {
     operationType: 'UPDATE',
     tableName: 'oauth_clients',
     label: 'Update Existing OAuth Client',
-    columnMappings: sharedMappings,
+    columnMappings: [...sharedMappings],
     conditions: [
       {
         id: 'demo-cond-client-id',

@@ -5,7 +5,7 @@ import { Input } from './ui/Input'
 import { Label } from './ui/Label'
 import { Select } from './ui/Select'
 import { Textarea } from './ui/Textarea'
-import { Question, QuestionType, UserDefinedTable, ValidationRule } from '@/types'
+import { Question, QuestionType, UserDefinedTable, ValidationRule, ConditionalLogic } from '@/types'
 import { generateId } from '@/lib/utils'
 import { Plus, Trash2, GripVertical, ChevronDown, ChevronUp } from 'lucide-react'
 import {
@@ -278,7 +278,7 @@ function SortableQuestionItem({
                           onUpdate(question.id, {
                             conditionalLogic: {
                               ...question.conditionalLogic!,
-                              operator: e.target.value as any,
+                              operator: e.target.value as ConditionalLogic['operator'],
                             },
                           })
                         }

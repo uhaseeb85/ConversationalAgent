@@ -75,7 +75,7 @@ export function FlowBuilderPage() {
       sqlOperations: sqlOperations.length > 0 ? sqlOperations : undefined,
       userDefinedTables: userDefinedTables.length > 0 ? userDefinedTables : undefined,
       questions,
-      createdAt: id ? flows.find((f) => f.id === id)!.createdAt : now,
+      createdAt: id ? (flows.find((f) => f.id === id)?.createdAt ?? now) : now,
       updatedAt: now,
       isActive,
     }
@@ -100,7 +100,7 @@ export function FlowBuilderPage() {
       sqlOperations: sqlOperations.length > 0 ? sqlOperations : undefined,
       userDefinedTables: userDefinedTables.length > 0 ? userDefinedTables : undefined,
       questions,
-      createdAt: id ? flows.find((f) => f.id === id)!.createdAt : new Date(),
+      createdAt: id ? (flows.find((f) => f.id === id)?.createdAt ?? new Date().toISOString()) : new Date().toISOString(),
       updatedAt: new Date(),
       isActive,
     }
@@ -108,7 +108,7 @@ export function FlowBuilderPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${flowData.name.replace(/\s+/g, '-').toLowerCase()}.json`
+    a.download = `${flowData.name.replaceAll(' ', '-').toLowerCase()}.json`
     a.click()
     URL.revokeObjectURL(url)
   }

@@ -1,14 +1,9 @@
-import { ReactNode } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Home, FileText, Settings, PlusCircle, Sparkles, Moon, Sun, Send } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 
-interface LayoutProps {
-  children?: ReactNode
-}
-
-export function Layout({ children }: LayoutProps) {
+export function Layout() {
   const location = useLocation()
   const { theme, toggleTheme } = useTheme()
 
@@ -74,7 +69,7 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </nav>
 
-      <main className="container mx-auto px-4 py-8">{children ?? <Outlet />}</main>
+      <main className="container mx-auto px-4 py-8"><Outlet /></main>
     </div>
   )
 }

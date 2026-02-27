@@ -21,38 +21,38 @@ export const useStore = create<AppStore>((set, get) => ({
 
   setFlows: (flows) => {
     set({ flows })
-    replaceAllFlows(flows)
+    replaceAllFlows(flows).catch((err) => console.error('IDB setFlows failed:', err instanceof Error ? err.message : err))
   },
   setSubmissions: (submissions) => {
     set({ submissions })
-    replaceAllSubmissions(submissions)
+    replaceAllSubmissions(submissions).catch((err) => console.error('IDB setSubmissions failed:', err instanceof Error ? err.message : err))
   },
 
   addFlow: (flow: OnboardingFlow) => {
     const flows = [...get().flows, flow]
     set({ flows })
-    putFlow(flow)
+    putFlow(flow).catch((err) => console.error('IDB addFlow failed:', err instanceof Error ? err.message : err))
   },
 
   updateFlow: (id: string, updates: Partial<OnboardingFlow>) => {
     const flows = get().flows.map((f) => (f.id === id ? { ...f, ...updates } : f))
     set({ flows })
     const updated = flows.find((f) => f.id === id)
-    if (updated) putFlow(updated)
+    if (updated) putFlow(updated).catch((err) => console.error('IDB updateFlow failed:', err instanceof Error ? err.message : err))
   },
 
   deleteFlow: (id: string) => {
     const flows = get().flows.filter((f) => f.id !== id)
     const submissions = get().submissions.filter((s) => s.flowId !== id)
     set({ flows, submissions })
-    idbDeleteFlow(id)
-    deleteSubmissionsByFlowId(id)
+    idbDeleteFlow(id).catch((err) => console.error('IDB deleteFlow failed:', err instanceof Error ? err.message : err))
+    deleteSubmissionsByFlowId(id).catch((err) => console.error('IDB deleteSubmissionsByFlowId failed:', err instanceof Error ? err.message : err))
   },
 
   addSubmission: (submission: Submission) => {
     const submissions = [...get().submissions, submission]
     set({ submissions })
-    putSubmission(submission)
+    putSubmission(submission).catch((err) => console.error('IDB addSubmission failed:', err instanceof Error ? err.message : err))
   },
 
   updateSubmission: (id: string, updates: Partial<Submission>) => {
@@ -61,13 +61,13 @@ export const useStore = create<AppStore>((set, get) => ({
     )
     set({ submissions })
     const updated = submissions.find((s) => s.id === id)
-    if (updated) putSubmission(updated)
+    if (updated) putSubmission(updated).catch((err) => console.error('IDB updateSubmission failed:', err instanceof Error ? err.message : err))
   },
 
   deleteSubmission: (id: string) => {
     const submissions = get().submissions.filter((s) => s.id !== id)
     set({ submissions })
-    idbDeleteSubmission(id)
+    idbDeleteSubmission(id).catch((err) => console.error('IDB deleteSubmission failed:', err instanceof Error ? err.message : err))
   },
 }))
 

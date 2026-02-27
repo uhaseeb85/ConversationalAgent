@@ -399,7 +399,31 @@ Return the updated Question object as JSON. Return ONLY the JSON object, no mark
     throw new Error(`AI did not return valid JSON. Response: "${response.substring(0, 200)}..."`)
   }
 
-  return JSON.parse(jsonText) as Question
+  let parsed: Question
+  try {
+    parsed = JSON.parse(jsonText) as Question
+  } catch {
+    throw new Error('AI returned malformed JSON. Please try again.')
+  }
+
+  // Validate and sanitise — same rules as generateQuestionsFromPurpose
+  if (!VALID_QUESTION_TYPES.includes(parsed.type)) {
+    parsed.type = 'text'
+  }
+  if (parsed.sqlColumnName) {
+    const validation = validateSQLIdentifier(parsed.sqlColumnName)
+    if (!validation.valid) parsed.sqlColumnName = ''
+  }
+  if (parsed.tableName) {
+    const validation = validateSQLIdentifier(parsed.tableName)
+    if (!validation.valid) parsed.tableName = undefined
+  }
+  if (!parsed.id) parsed.id = `q${Date.now()}_refined`
+  if (!parsed.label) parsed.label = 'Untitled Question'
+  if (parsed.required === undefined) parsed.required = false
+  if (!Array.isArray(parsed.validationRules)) parsed.validationRules = []
+
+  return parsed
 }
 
 /**

@@ -93,7 +93,7 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<AIModel[]> 
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': window.location.origin,
+        'HTTP-Referer': globalThis.location.origin,
         'X-Title': 'Conversational Onboarding',
       },
     })
@@ -120,8 +120,8 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<AIModel[]> 
       description: model.description,
       pricing: model.pricing
         ? {
-            prompt: parseFloat(model.pricing.prompt),
-            completion: parseFloat(model.pricing.completion),
+            prompt: Number.parseFloat(model.pricing.prompt),
+            completion: Number.parseFloat(model.pricing.completion),
           }
         : undefined,
     }))
@@ -138,7 +138,8 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<AIModel[]> 
 export async function streamChatCompletion(
   messages: ChatMessage[],
   onChunk: (token: string) => void,
-  config?: AIConfig
+  config?: AIConfig,
+  signal?: AbortSignal
 ): Promise<string> {
   const cfg = config ?? loadAIConfig()
   if (!cfg.enabled) throw new Error('AI is not enabled')
@@ -147,11 +148,12 @@ export async function streamChatCompletion(
 
   const response = await fetch(url, {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${cfg.apiKey}`,
       // OpenRouter requires these
-      'HTTP-Referer': window.location.origin,
+      'HTTP-Referer': globalThis.location.origin,
       'X-Title': 'Conversational Onboarding',
     },
     body: JSON.stringify({
@@ -216,7 +218,7 @@ export async function chatCompletion(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${cfg.apiKey}`,
-      'HTTP-Referer': window.location.origin,
+      'HTTP-Referer': globalThis.location.origin,
       'X-Title': 'Conversational Onboarding',
     },
     body: JSON.stringify({

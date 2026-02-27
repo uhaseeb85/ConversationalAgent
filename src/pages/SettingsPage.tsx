@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
 import { loadAIConfig, saveAIConfig, chatCompletion, fetchOpenRouterModels, AI_PROVIDERS, type AIModel } from '@/lib/ai-client'
 import { useStore } from '@/lib/store'
-import { replaceAllFlows, replaceAllSubmissions, clearFlows, clearSubmissions, estimateStorageUsage } from '@/lib/idb'
+import { clearFlows, clearSubmissions, estimateStorageUsage } from '@/lib/idb'
+import { validateSQLIdentifier } from '@/lib/sql-generator'
 import { Settings, Bot, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, RefreshCw, Download, Upload, Trash2, Database } from 'lucide-react'
 
 export function SettingsPage() {
@@ -331,25 +332,38 @@ export function SettingsPage() {
                 input.onchange = (e) => {
                   const file = (e.target as HTMLInputElement).files?.[0]
                   if (!file) return
-                  const reader = new FileReader()
-                  reader.onload = (ev) => {
+                  void (async () => {
                     try {
-                      const data = JSON.parse(ev.target?.result as string)
+                      const text = await file.text()
+                      const data = JSON.parse(text) as Record<string, unknown>
                       if (!Array.isArray(data.flows) || !Array.isArray(data.submissions)) {
                         alert('Invalid backup file: missing flows or submissions arrays.')
                         return
                       }
-                      if (!confirm(`Import ${data.flows.length} flows and ${data.submissions.length} submissions? This will REPLACE all existing data.`)) return
-                      setFlows(data.flows)
-                      setSubmissions(data.submissions)
-                      replaceAllFlows(data.flows)
-                      replaceAllSubmissions(data.submissions)
+                      // Sanitise SQL identifiers in imported flows
+                      const sanitised = (data.flows as Record<string, unknown>[]).map((flow) => {
+                        if (Array.isArray(flow.questions)) {
+                          flow.questions = (flow.questions as Record<string, unknown>[]).map((q) => {
+                            if (typeof q.sqlColumnName === 'string' && q.sqlColumnName) {
+                              if (!validateSQLIdentifier(q.sqlColumnName).valid) q.sqlColumnName = ''
+                            }
+                            if (typeof q.tableName === 'string' && q.tableName) {
+                              if (!validateSQLIdentifier(q.tableName).valid) q.tableName = undefined
+                            }
+                            return q
+                          })
+                        }
+                        return flow
+                      })
+                      if (!confirm(`Import ${sanitised.length} flows and ${(data.submissions as unknown[]).length} submissions? This will REPLACE all existing data.`)) return
+                      // setFlows already writes to IDB via the store — no need for replaceAllFlows
+                      setFlows(sanitised as unknown as Parameters<typeof setFlows>[0])
+                      setSubmissions(data.submissions as unknown as Parameters<typeof setSubmissions>[0])
                       alert('Data imported successfully!')
                     } catch {
                       alert('Invalid JSON file.')
                     }
-                  }
-                  reader.readAsText(file)
+                  })()
                 }
                 input.click()
               }}
@@ -364,10 +378,11 @@ export function SettingsPage() {
               onClick={() => {
                 if (!confirm('Are you sure? This will delete ALL flows and submissions permanently.')) return
                 if (!confirm('This action CANNOT be undone. Continue?')) return
+                // setFlows([]) writes to IDB via the store; clearFlows/clearSubmissions for extra safety
                 setFlows([])
                 setSubmissions([])
-                clearFlows()
-                clearSubmissions()
+                void clearFlows()
+                void clearSubmissions()
                 alert('All data cleared.')
               }}
             >

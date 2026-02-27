@@ -122,7 +122,7 @@ export function parseDDL(ddl: string): ParsedTable[] {
   const regex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`\[]?(\w+)["`\]]?\s*\(([^;]+?)\)\s*;?/gi
   let match: RegExpExecArray | null
   while ((match = regex.exec(ddl)) !== null) {
-    const tableName = match[1].toUpperCase()
+    const tableName = match[1]
     const columnBlock = match[2]
 
     const rawColumns = parseColumns(columnBlock)

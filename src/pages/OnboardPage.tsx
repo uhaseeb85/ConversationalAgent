@@ -16,14 +16,13 @@ import { extractAnswer } from '@/lib/answer-extractor'
 export function OnboardPage() {
   const { flowId } = useParams<{ flowId: string }>()
   const navigate = useNavigate()
-  const flows = useStore((state) => state.flows)
   const addSubmission = useStore((state) => state.addSubmission)
 
   const [flow, setFlow] = useState<OnboardingFlow | null>(null)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [responses, setResponses] = useState<Response[]>([])
   const [currentValue, setCurrentValue] = useState<string | string[]>('')
-  const [chatMessages, setChatMessages] = useState<Array<{ type: 'bot' | 'user'; content: string; questionId?: string }>>([])
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; type: 'bot' | 'user'; content: string; questionId?: string }>>([])
   const [isTyping, setIsTyping] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const [generatedSQL, setGeneratedSQL] = useState<string>('')
@@ -34,9 +33,16 @@ export function OnboardPage() {
 
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const aiStreamAbortRef = useRef<AbortController | null>(null)
+
+  // Abort any in-flight AI stream when the component unmounts
+  useEffect(() => {
+    return () => { aiStreamAbortRef.current?.abort() }
+  }, [])
 
   useEffect(() => {
-    const foundFlow = flows.find((f) => f.id === flowId)
+    // Read flows directly from the store to avoid restarting onboarding on unrelated store updates
+    const foundFlow = useStore.getState().flows.find((f) => f.id === flowId)
     if (!foundFlow) {
       navigate('/')
       return
@@ -44,16 +50,17 @@ export function OnboardPage() {
     setFlow(foundFlow)
 
     // Initial welcome message
-    const welcomeText = foundFlow.welcomeMessage || 
+    const welcomeText = foundFlow.welcomeMessage ||
       `Welcome! I'll help you get onboarded. Let's get started with a few questions.`
     setChatMessages([
       {
+        id: generateId(),
         type: 'bot',
         content: welcomeText,
       },
     ])
     showNextQuestion(foundFlow, 0, [])
-  }, [flowId, flows, navigate])
+  }, [flowId, navigate])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -86,8 +93,15 @@ export function OnboardPage() {
         return str.length < Number(rule.value ?? 0) ? (rule.message ?? `Minimum ${rule.value} characters`) : null
       case 'max-length':
         return str.length > Number(rule.value ?? Infinity) ? (rule.message ?? `Maximum ${rule.value} characters`) : null
-      case 'pattern':
-        return rule.value && str && !new RegExp(String(rule.value)).test(str) ? (rule.message ?? 'Invalid format') : null
+      case 'pattern': {
+        if (!rule.value || !str) return null
+        try {
+          return !new RegExp(String(rule.value)).test(str) ? (rule.message ?? 'Invalid format') : null
+        } catch {
+          // Invalid regex pattern — skip it rather than freezing the browser
+          return null
+        }
+      }
       case 'min': {
         const n = Number.parseFloat(str)
         return !Number.isNaN(n) && n < Number(rule.value ?? -Infinity) ? (rule.message ?? `Minimum value is ${rule.value}`) : null
@@ -185,8 +199,13 @@ Be warm and concise. Do not add unrelated commentary.`
       // Seed an empty bot message that we will stream into
       setChatMessages((prev) => [
         ...prev,
-        { type: 'bot' as const, content: '', questionId: nextQuestion.id },
+        { id: generateId(), type: 'bot' as const, content: '', questionId: nextQuestion.id },
       ])
+
+      // Abort any previous stream before starting a new one
+      aiStreamAbortRef.current?.abort()
+      const abortController = new AbortController()
+      aiStreamAbortRef.current = abortController
 
       streamChatCompletion(
         [
@@ -206,7 +225,8 @@ Be warm and concise. Do not add unrelated commentary.`
             return updated
           })
         },
-        aiConfig
+        aiConfig,
+        abortController.signal
       ).finally(() => {
         setIsTyping(false)
         setCurrentQuestionIndex(qIndex)
@@ -214,7 +234,7 @@ Be warm and concise. Do not add unrelated commentary.`
     } else {
       setChatMessages((prev) => [
         ...prev,
-        { type: 'bot', content: nextQuestion.label, questionId: nextQuestion.id },
+        { id: generateId(), type: 'bot', content: nextQuestion.label, questionId: nextQuestion.id },
       ])
       setCurrentQuestionIndex(qIndex)
     }
@@ -243,7 +263,7 @@ Be warm and concise. Do not add unrelated commentary.`
 
     setChatMessages((prev) => [
       ...prev,
-      { type: 'user', content: displayValue || '(skipped)' },
+      { id: generateId(), type: 'user', content: displayValue || '(skipped)' },
     ])
 
     // Save response with raw value and show next question immediately
@@ -261,12 +281,13 @@ Be warm and concise. Do not add unrelated commentary.`
     // Run AI extraction in background and update the response value
     if (typeof rawValue === 'string' && rawValue.trim()) {
       const currentAiConfig = loadAIConfig()
+      const questionIdForExtraction = currentQuestion.id  // capture before async
       extractAnswer(rawValue, currentQuestion, currentAiConfig)
         .then((extracted) => {
           if (extracted !== rawValue) {
             setResponses((prev) =>
               prev.map((r) =>
-                r.questionId === currentQuestion.id
+                r.questionId === questionIdForExtraction
                   ? { ...r, value: extracted }
                   : r
               )
@@ -287,6 +308,7 @@ Be warm and concise. Do not add unrelated commentary.`
     setChatMessages((prev) => [
       ...prev,
       {
+        id: generateId(),
         type: 'bot',
         content: completionText,
       },
@@ -308,7 +330,7 @@ Be warm and concise. Do not add unrelated commentary.`
     setGeneratedSQL(sql)
     setCompletedSubmission(submission)
 
-    await addSubmission(submission)
+    addSubmission(submission)
   }
 
   const renderInput = (question: Question) => {
@@ -463,9 +485,9 @@ Be warm and concise. Do not add unrelated commentary.`
 
         <div className="h-[500px] overflow-y-auto p-6 space-y-4 bg-muted/30">
           <AnimatePresence>
-            {chatMessages.map((message, index) => (
+            {chatMessages.map((message) => (
               <motion.div
-                key={index}
+                key={message.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}

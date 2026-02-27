@@ -16,7 +16,12 @@ export function validateSQLIdentifier(identifier: string): { valid: boolean; err
   }
 
   // Prevent SQL keywords as identifiers
-  const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'EXEC', 'EXECUTE']
+  const sqlKeywords = [
+    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE',
+    'EXEC', 'EXECUTE', 'UNION', 'GRANT', 'REVOKE', 'MERGE', 'CALL', 'BEGIN',
+    'COMMIT', 'ROLLBACK', 'WHERE', 'FROM', 'TABLE', 'DATABASE', 'SET', 'USE',
+    'INTO', 'AND', 'OR', 'NOT', 'SHOW', 'DESCRIBE', 'EXPLAIN',
+  ]
   if (sqlKeywords.includes(identifier.toUpperCase())) {
     return {
       valid: false,
@@ -53,28 +58,25 @@ function formatSQLValue(value: string | number | boolean | string[] | null, type
   }
 
   switch (type) {
-    case 'number':
+    case 'number': {
       // Ensure it's actually a number to prevent injection
       const num = Number(value)
-      if (isNaN(num)) {
-        throw new Error(`Invalid number value: ${value}`)
+      if (Number.isNaN(num)) {
+        throw new TypeError(`Invalid number value: ${value}`)
       }
       return String(num)
+    }
     
     case 'yes-no':
       return value === true || value === 'yes' ? '1' : '0'
     
     case 'date':
       if (typeof value === 'string') {
-        try {
-          const date = new Date(value)
-          if (isNaN(date.getTime())) {
-            throw new Error(`Invalid date: ${value}`)
-          }
-          return `'${format(date, 'yyyy-MM-dd')}'`
-        } catch {
-          return `'${escapeSQLString(String(value))}'`
+        const date = new Date(value)
+        if (Number.isNaN(date.getTime())) {
+          throw new TypeError(`Invalid date value: '${value}' cannot be parsed as a date`)
         }
+        return `'${format(date, 'yyyy-MM-dd')}'`
       }
       return `'${escapeSQLString(String(value))}'`
     
@@ -147,8 +149,14 @@ validateSQLIdentifierThrow(condition.columnName, 'WHERE column name')
         return `${condition.columnName} < ${value}`
       case 'like':
         return `${condition.columnName} LIKE ${value}`
-      case 'in':
-        return `${condition.columnName} IN (${value})`
+      case 'in': {
+        // value is a single-quoted string like 'a, b, c' — split and re-quote each item
+        const rawVal = condition.valueType === 'static'
+          ? condition.value
+          : String(value).replace(/^'|'$/g, '')
+        const items = rawVal.split(',').map((v) => `'${escapeSQLString(v.trim())}'`)
+        return `${condition.columnName} IN (${items.join(', ')})`
+      }
       default:
         return `${condition.columnName} = ${value}`
     }
@@ -185,6 +193,10 @@ function generateInsertSQL(
     }
   })
 
+  if (columns.length === 0) {
+    throw new Error(`INSERT into "${operation.tableName}" has no column mappings. Add at least one question-to-column mapping.`)
+  }
+
   return `INSERT INTO ${operation.tableName} (${columns.join(', ')})
 VALUES (${values.join(', ')});`
 }
@@ -215,6 +227,10 @@ function generateUpdateSQL(
     }
   })
 
+  if (setClauses.length === 0) {
+    throw new Error(`UPDATE on "${operation.tableName}" has no column mappings. Add at least one question-to-column mapping.`)
+  }
+
   const whereClause = generateWhereClause(operation.conditions, responses, flow)
 
   return `UPDATE ${operation.tableName}
@@ -232,7 +248,11 @@ function generateDeleteSQL(
 ): string {
   // Validate table name
   validateSQLIdentifierThrow(operation.tableName, 'table name')
-  
+
+  if (!operation.conditions || operation.conditions.length === 0) {
+    throw new Error(`DELETE on "${operation.tableName}" has no WHERE conditions. A bare DELETE would remove all rows — add at least one condition.`)
+  }
+
   const whereClause = generateWhereClause(operation.conditions, responses, flow)
 
   return `DELETE FROM ${operation.tableName}

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Plus, Edit, Trash2, MessageSquare, Calendar, Settings, Database, FileText, Globe, Download, Upload, X, Sparkles, Play, BarChart3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { generateId } from '@/lib/utils'
+import { validateSQLIdentifier } from '@/lib/sql-generator'
 import type { OnboardingFlow } from '@/types'
 
 export function HomePage() {
@@ -31,7 +32,7 @@ export function HomePage() {
   }
 
   const handleDelete = async (flowId: string, flowName: string) => {
-    if (window.confirm(`Are you sure you want to delete "${flowName}"?`)) {
+    if (globalThis.confirm(`Are you sure you want to delete "${flowName}"?`)) {
       deleteFlow(flowId)
     }
   }
@@ -41,41 +42,62 @@ export function HomePage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${flow.name.replace(/\s+/g, '-').toLowerCase()}.json`
+    a.download = `${flow.name.replaceAll(' ', '-').toLowerCase()}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  const handleImportFlow = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFlow = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const imported = JSON.parse(ev.target?.result as string)
 
-        // Validate required fields
-        if (
-          !imported ||
-          typeof imported !== 'object' ||
-          typeof imported.name !== 'string' ||
-          !Array.isArray(imported.questions)
-        ) {
-          alert('Invalid flow file: missing required fields (name, questions).')
-          return
-        }
+    try {
+      const text = await file.text()
+      const imported = JSON.parse(text)
 
-        addFlow({
-          ...imported,
-          id: generateId(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-      } catch {
-        alert('Invalid flow JSON file.')
+      // Validate required structure
+      if (
+        !imported ||
+        typeof imported !== 'object' ||
+        typeof imported.name !== 'string' ||
+        !Array.isArray(imported.questions)
+      ) {
+        alert('Invalid flow file: missing required fields (name, questions).')
+        return
       }
+
+      // Sanitise SQL identifiers and regex patterns inside questions
+      imported.questions = (imported.questions as Record<string, unknown>[]).map((q) => {
+        if (typeof q.sqlColumnName === 'string' && q.sqlColumnName) {
+          const v = validateSQLIdentifier(q.sqlColumnName)
+          if (!v.valid) q.sqlColumnName = ''
+        }
+        if (typeof q.tableName === 'string' && q.tableName) {
+          const v = validateSQLIdentifier(q.tableName)
+          if (!v.valid) q.tableName = undefined
+        }
+        // Strip invalid regex patterns to prevent ReDoS
+        if (Array.isArray(q.validationRules)) {
+          q.validationRules = (q.validationRules as Record<string, unknown>[]).map((r) => {
+            if (r.type === 'pattern' && typeof r.value === 'string') {
+              try { new RegExp(r.value) } catch { r.value = '' }
+            }
+            return r
+          })
+        }
+        return q
+      })
+
+      addFlow({
+        ...imported,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    } catch {
+      alert('Invalid flow JSON file.')
     }
-    reader.readAsText(file)
+
     e.target.value = ''
   }
 
