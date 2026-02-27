@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw } from 'lucide-react'
 import { streamChatCompletion, loadAIConfig, AIConfig } from '@/lib/ai-client'
+import { extractAnswer } from '@/lib/answer-extractor'
 
 
 export function OnboardPage() {
@@ -30,6 +31,7 @@ export function OnboardPage() {
   const [copiedSQL, setCopiedSQL] = useState(false)
   const [startedAt] = useState(new Date())
   const [aiConfig] = useState<AIConfig>(() => loadAIConfig())
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -74,6 +76,34 @@ export function OnboardPage() {
     setCurrentValue(q.type === 'multi-select' ? [] : '')
   }, [currentQuestionIndex, flow])
 
+  /** Check a single validation rule; returns error message or null */
+  const checkRule = (
+    rule: { type: string; value?: string | number; message?: string },
+    raw: string | string[],
+    str: string
+  ): string | null => {
+    switch (rule.type) {
+      case 'required':
+        return (Array.isArray(raw) ? raw.length === 0 : !str.trim()) ? (rule.message ?? 'This field is required') : null
+      case 'min-length':
+        return str.length < Number(rule.value ?? 0) ? (rule.message ?? `Minimum ${rule.value} characters`) : null
+      case 'max-length':
+        return str.length > Number(rule.value ?? Infinity) ? (rule.message ?? `Maximum ${rule.value} characters`) : null
+      case 'pattern':
+        return rule.value && str && !new RegExp(String(rule.value)).test(str) ? (rule.message ?? 'Invalid format') : null
+      case 'min': {
+        const n = Number.parseFloat(str)
+        return !Number.isNaN(n) && n < Number(rule.value ?? -Infinity) ? (rule.message ?? `Minimum value is ${rule.value}`) : null
+      }
+      case 'max': {
+        const n = Number.parseFloat(str)
+        return !Number.isNaN(n) && n > Number(rule.value ?? Infinity) ? (rule.message ?? `Maximum value is ${rule.value}`) : null
+      }
+      default:
+        return null
+    }
+  }
+
   const shouldShowQuestion = (question: Question, existingResponses: Response[]): boolean => {
     if (!question.conditionalLogic) return true
 
@@ -92,9 +122,36 @@ export function OnboardPage() {
         return responseValue !== conditionValue
       case 'contains':
         return responseValue.includes(conditionValue)
+      case 'greater-than': {
+        const numResp = Number.parseFloat(responseValue)
+        const numCond = Number.parseFloat(conditionValue)
+        return !Number.isNaN(numResp) && !Number.isNaN(numCond) && numResp > numCond
+      }
+      case 'less-than': {
+        const numResp = Number.parseFloat(responseValue)
+        const numCond = Number.parseFloat(conditionValue)
+        return !Number.isNaN(numResp) && !Number.isNaN(numCond) && numResp < numCond
+      }
       default:
         return true
     }
+  }
+
+  /** Count only questions that are visible given current responses */
+  const getVisibleQuestionCount = (flowData: OnboardingFlow, existingResponses: Response[]): number => {
+    return flowData.questions.filter((q) => shouldShowQuestion(q, existingResponses)).length
+  }
+
+  /** Validate an answer against the question's validationRules */
+  const validateAnswer = (question: Question, value: string | string[]): string | null => {
+    const rules = question.validationRules ?? []
+    if (rules.length === 0) return null
+    const strValue = Array.isArray(value) ? value.join(', ') : value
+    for (const rule of rules) {
+      const msg = checkRule(rule, value, strValue)
+      if (msg) return msg
+    }
+    return null
   }
 
   const getNextQuestion = (flowData: OnboardingFlow, currentIdx: number, existingResponses: Response[]): Question | null => {
@@ -169,19 +226,30 @@ Be warm and concise. Do not add unrelated commentary.`
     }
   }
 
-  const handleSubmitAnswer = (overrideValue?: string | string[]) => {
+  const handleSubmitAnswer = async (overrideValue?: string | string[]) => {
     if (!flow) return
 
     const currentQuestion = flow.questions[currentQuestionIndex]
     if (!currentQuestion) return
 
-    const valueToSubmit = overrideValue !== undefined ? overrideValue : currentValue
+    const rawValue = overrideValue !== undefined ? overrideValue : currentValue
 
-    // Validation
-    const isEmpty = Array.isArray(valueToSubmit) ? valueToSubmit.length === 0 : !valueToSubmit
-    if (currentQuestion.required && isEmpty) {
-      alert('This question is required')
+    // Run validation rules
+    const error = validateAnswer(currentQuestion, rawValue as string | string[])
+    if (error) {
+      setValidationError(error)
       return
+    }
+    setValidationError(null)
+
+    // AI answer extraction for free-text inputs
+    let valueToSubmit = rawValue
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+      try {
+        valueToSubmit = await extractAnswer(rawValue, currentQuestion, aiConfig)
+      } catch {
+        valueToSubmit = rawValue
+      }
     }
 
     // Add user response to chat
@@ -371,7 +439,7 @@ Be warm and concise. Do not add unrelated commentary.`
             <h1 className="text-xl font-semibold">{flow.name}</h1>
             {!isComplete && currentQuestion && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Question {responses.length + 1} of {flow.questions.length}
+                Question {responses.length + 1} of {getVisibleQuestionCount(flow, responses)}
               </p>
             )}
             {isComplete && (
@@ -386,7 +454,7 @@ Be warm and concise. Do not add unrelated commentary.`
           <div className="h-1 bg-muted">
             <div
               className="h-1 bg-primary transition-all duration-500"
-              style={{ width: `${Math.round((responses.length / flow.questions.length) * 100)}%` }}
+              style={{ width: `${Math.round((responses.length / Math.max(getVisibleQuestionCount(flow, responses), 1)) * 100)}%` }}
             />
           </div>
         )}
@@ -497,9 +565,13 @@ Be warm and concise. Do not add unrelated commentary.`
                 <User className="h-5 w-5 text-muted-foreground" />
               </div>
             </div>
+            {validationError && (
+              <p className="text-sm text-red-500 mt-1 ml-12">{validationError}</p>
+            )}
             {!currentQuestion.required && (
               <button
                 onClick={() => {
+                  setValidationError(null)
                   handleSubmitAnswer('')
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground mt-2"

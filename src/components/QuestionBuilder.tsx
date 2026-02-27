@@ -5,7 +5,7 @@ import { Input } from './ui/Input'
 import { Label } from './ui/Label'
 import { Select } from './ui/Select'
 import { Textarea } from './ui/Textarea'
-import { Question, QuestionType, UserDefinedTable } from '@/types'
+import { Question, QuestionType, UserDefinedTable, ValidationRule } from '@/types'
 import { generateId } from '@/lib/utils'
 import { Plus, Trash2, GripVertical, ChevronDown, ChevronUp } from 'lucide-react'
 import {
@@ -286,6 +286,8 @@ function SortableQuestionItem({
                         <option value="equals">equals</option>
                         <option value="not-equals">not equals</option>
                         <option value="contains">contains</option>
+                        <option value="greater-than">greater than</option>
+                        <option value="less-than">less than</option>
                       </Select>
 
                       <Input
@@ -305,6 +307,84 @@ function SortableQuestionItem({
                 </div>
               </div>
             )}
+
+            {/* Validation Rules */}
+            <div className="border-t pt-4 mt-4">
+              <Label className="mb-2 block">Validation Rules</Label>
+              {(question.validationRules ?? []).map((rule, ruleIdx) => (
+                <div key={ruleIdx} className="grid grid-cols-4 gap-2 mb-2 items-end">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Type</Label>
+                    <Select
+                      value={rule.type}
+                      onChange={(e) => {
+                        const updated = [...(question.validationRules ?? [])]
+                        updated[ruleIdx] = { ...rule, type: e.target.value as ValidationRule['type'] }
+                        onUpdate(question.id, { validationRules: updated })
+                      }}
+                    >
+                      <option value="required">Required</option>
+                      <option value="min-length">Min Length</option>
+                      <option value="max-length">Max Length</option>
+                      <option value="pattern">Pattern (Regex)</option>
+                      <option value="min">Min Value</option>
+                      <option value="max">Max Value</option>
+                    </Select>
+                  </div>
+                  {rule.type !== 'required' && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Value</Label>
+                      <Input
+                        value={rule.value != null ? String(rule.value) : ''}
+                        onChange={(e) => {
+                          const updated = [...(question.validationRules ?? [])]
+                          const val = ['min-length', 'max-length', 'min', 'max'].includes(rule.type)
+                            ? (e.target.value === '' ? undefined : Number(e.target.value))
+                            : e.target.value
+                          updated[ruleIdx] = { ...rule, value: val as string | number | undefined }
+                          onUpdate(question.id, { validationRules: updated })
+                        }}
+                        placeholder={rule.type === 'pattern' ? '^[A-Z]' : '0'}
+                      />
+                    </div>
+                  )}
+                  <div className={`space-y-1 ${rule.type === 'required' ? 'col-span-2' : ''}`}>
+                    <Label className="text-xs">Error Message</Label>
+                    <Input
+                      value={rule.message ?? ''}
+                      onChange={(e) => {
+                        const updated = [...(question.validationRules ?? [])]
+                        updated[ruleIdx] = { ...rule, message: e.target.value || undefined }
+                        onUpdate(question.id, { validationRules: updated })
+                      }}
+                      placeholder="Custom error message"
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const updated = (question.validationRules ?? []).filter((_, i) => i !== ruleIdx)
+                      onUpdate(question.id, { validationRules: updated })
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const updated = [...(question.validationRules ?? []), { type: 'required' as const }]
+                  onUpdate(question.id, { validationRules: updated })
+                }}
+                className="mt-1"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add Rule
+              </Button>
+            </div>
           </div>
         )}
       </div>

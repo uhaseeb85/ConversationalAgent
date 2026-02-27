@@ -6,14 +6,15 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { Label } from '@/components/ui/Label'
+import { Select } from '@/components/ui/Select'
 import { QuestionBuilder } from '@/components/QuestionBuilder'
 import { SchemaImporter } from '@/components/SchemaImporter'
 import { TableSchemaBuilder } from '@/components/TableSchemaBuilder'
-import { Question, SQLOperation, UserDefinedTable } from '@/types'
+import { Question, SQLOperation, SQLCondition, UserDefinedTable } from '@/types'
 import { generateId } from '@/lib/utils'
-import { Save, ArrowLeft, Database, HelpCircle, Import, Download } from 'lucide-react'
+import { Save, ArrowLeft, Database, HelpCircle, Import, Download, Trash2, Layers } from 'lucide-react'
 
-type Tab = 'details' | 'schema' | 'questions' | 'import'
+type Tab = 'details' | 'schema' | 'questions' | 'sql-ops' | 'import'
 
 export function FlowBuilderPage() {
   const { id } = useParams()
@@ -191,6 +192,17 @@ export function FlowBuilderPage() {
             Questions
           </button>
           <button
+            onClick={() => setActiveTab('sql-ops')}
+            className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'sql-ops'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
+            }`}
+          >
+            <Layers className="h-4 w-4 inline-block mr-1" />
+            SQL Operations
+          </button>
+          <button
             onClick={() => setActiveTab('import')}
             className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'import'
@@ -320,6 +332,313 @@ export function FlowBuilderPage() {
           onDeleteQuestion={handleDeleteQuestion}
           onReorderQuestions={handleReorderQuestions}
         />
+      )}
+
+      {activeTab === 'sql-ops' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-5 w-5 text-blue-600" />
+                SQL Operations
+              </CardTitle>
+              <CardDescription>
+                Define INSERT, UPDATE, or DELETE operations that execute when the flow is submitted.
+                Map questions to columns and add WHERE conditions for UPDATE/DELETE.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {sqlOperations.length === 0 && (
+                <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                  <p className="text-muted-foreground mb-4">No SQL operations yet.</p>
+                </div>
+              )}
+
+              {sqlOperations.map((op, opIdx) => (
+                <div key={op.id} className="border rounded-lg p-4 space-y-4 bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm">
+                      Operation #{opIdx + 1}: {op.label || op.operationType}
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSqlOperations(sqlOperations.filter((o) => o.id !== op.id))}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Operation Type</Label>
+                      <Select
+                        value={op.operationType}
+                        onChange={(e) => {
+                          const updated = [...sqlOperations]
+                          updated[opIdx] = { ...op, operationType: e.target.value as SQLOperation['operationType'] }
+                          setSqlOperations(updated)
+                        }}
+                      >
+                        <option value="INSERT">INSERT</option>
+                        <option value="UPDATE">UPDATE</option>
+                        <option value="DELETE">DELETE</option>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Table Name</Label>
+                      <Input
+                        value={op.tableName}
+                        onChange={(e) => {
+                          const updated = [...sqlOperations]
+                          updated[opIdx] = { ...op, tableName: e.target.value }
+                          setSqlOperations(updated)
+                        }}
+                        placeholder="e.g. users"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Label</Label>
+                      <Input
+                        value={op.label || ''}
+                        onChange={(e) => {
+                          const updated = [...sqlOperations]
+                          updated[opIdx] = { ...op, label: e.target.value }
+                          setSqlOperations(updated)
+                        }}
+                        placeholder="e.g. Create User"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Column Mappings */}
+                  {op.operationType !== 'DELETE' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Column Mappings</Label>
+                      {op.columnMappings.map((cm, cmIdx) => (
+                        <div key={cmIdx} className="grid grid-cols-3 gap-2 items-end">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Question</Label>
+                            <Select
+                              value={cm.questionId}
+                              onChange={(e) => {
+                                const updated = [...sqlOperations]
+                                const mappings = [...op.columnMappings]
+                                mappings[cmIdx] = { ...cm, questionId: e.target.value }
+                                updated[opIdx] = { ...op, columnMappings: mappings }
+                                setSqlOperations(updated)
+                              }}
+                            >
+                              <option value="">Select question...</option>
+                              {questions.map((q) => (
+                                <option key={q.id} value={q.id}>
+                                  {q.label || q.id}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Column</Label>
+                            <Input
+                              value={cm.columnName}
+                              onChange={(e) => {
+                                const updated = [...sqlOperations]
+                                const mappings = [...op.columnMappings]
+                                mappings[cmIdx] = { ...cm, columnName: e.target.value }
+                                updated[opIdx] = { ...op, columnMappings: mappings }
+                                setSqlOperations(updated)
+                              }}
+                              placeholder="column_name"
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const updated = [...sqlOperations]
+                              updated[opIdx] = {
+                                ...op,
+                                columnMappings: op.columnMappings.filter((_, i) => i !== cmIdx),
+                              }
+                              setSqlOperations(updated)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const updated = [...sqlOperations]
+                          updated[opIdx] = {
+                            ...op,
+                            columnMappings: [...op.columnMappings, { questionId: '', columnName: '' }],
+                          }
+                          setSqlOperations(updated)
+                        }}
+                      >
+                        + Add Mapping
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* WHERE Conditions (UPDATE / DELETE) */}
+                  {op.operationType !== 'INSERT' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">WHERE Conditions</Label>
+                      {op.conditions.map((cond, cIdx) => (
+                        <div key={cond.id ?? cIdx} className="grid grid-cols-5 gap-2 items-end">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Column</Label>
+                            <Input
+                              value={cond.columnName}
+                              onChange={(e) => {
+                                const updated = [...sqlOperations]
+                                const conds = [...op.conditions]
+                                conds[cIdx] = { ...cond, columnName: e.target.value }
+                                updated[opIdx] = { ...op, conditions: conds }
+                                setSqlOperations(updated)
+                              }}
+                              placeholder="id"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Operator</Label>
+                            <Select
+                              value={cond.operator}
+                              onChange={(e) => {
+                                const updated = [...sqlOperations]
+                                const conds = [...op.conditions]
+                                conds[cIdx] = { ...cond, operator: e.target.value as SQLCondition['operator'] }
+                                updated[opIdx] = { ...op, conditions: conds }
+                                setSqlOperations(updated)
+                              }}
+                            >
+                              <option value="equals">equals</option>
+                              <option value="not-equals">not equals</option>
+                              <option value="greater-than">greater than</option>
+                              <option value="less-than">less than</option>
+                              <option value="like">like</option>
+                              <option value="in">in</option>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Value Source</Label>
+                            <Select
+                              value={cond.valueType}
+                              onChange={(e) => {
+                                const newType = e.target.value as 'static' | 'question'
+                                const updated = [...sqlOperations]
+                                const conds = [...op.conditions]
+                                conds[cIdx] = {
+                                  ...cond,
+                                  valueType: newType,
+                                  value: newType === 'question' ? '' : cond.value,
+                                }
+                                updated[opIdx] = { ...op, conditions: conds }
+                                setSqlOperations(updated)
+                              }}
+                            >
+                              <option value="static">Static value</option>
+                              <option value="question">From question</option>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Value</Label>
+                            {cond.valueType === 'question' ? (
+                              <Select
+                                value={cond.value.replaceAll(/(?:^\$\{)|(?:\}$)/g, '')}
+                                onChange={(e) => {
+                                  const updated = [...sqlOperations]
+                                  const conds = [...op.conditions]
+                                  conds[cIdx] = { ...cond, value: `\${${e.target.value}}` }
+                                  updated[opIdx] = { ...op, conditions: conds }
+                                  setSqlOperations(updated)
+                                }}
+                              >
+                                <option value="">Select question...</option>
+                                {questions.map((q) => (
+                                  <option key={q.id} value={q.id}>
+                                    {q.label || q.id}
+                                  </option>
+                                ))}
+                              </Select>
+                            ) : (
+                              <Input
+                                value={cond.value}
+                                onChange={(e) => {
+                                  const updated = [...sqlOperations]
+                                  const conds = [...op.conditions]
+                                  conds[cIdx] = { ...cond, value: e.target.value }
+                                  updated[opIdx] = { ...op, conditions: conds }
+                                  setSqlOperations(updated)
+                                }}
+                                placeholder="value"
+                              />
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const updated = [...sqlOperations]
+                              updated[opIdx] = {
+                                ...op,
+                                conditions: op.conditions.filter((_, i) => i !== cIdx),
+                              }
+                              setSqlOperations(updated)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const updated = [...sqlOperations]
+                          const newCond: SQLCondition = {
+                            id: generateId(),
+                            columnName: '',
+                            operator: 'equals',
+                            value: '',
+                            valueType: 'static',
+                          }
+                          updated[opIdx] = { ...op, conditions: [...op.conditions, newCond] }
+                          setSqlOperations(updated)
+                        }}
+                      >
+                        + Add Condition
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <Button
+                onClick={() => {
+                  const newOp: SQLOperation = {
+                    id: generateId(),
+                    operationType: 'INSERT',
+                    tableName: tableName || '',
+                    label: '',
+                    columnMappings: [],
+                    conditions: [],
+                    order: sqlOperations.length,
+                  }
+                  setSqlOperations([...sqlOperations, newOp])
+                }}
+                variant="outline"
+                className="w-full"
+              >
+                + Add SQL Operation
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {activeTab === 'import' && (

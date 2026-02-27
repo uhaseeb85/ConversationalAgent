@@ -12,7 +12,7 @@ import {
   replaceAllSubmissions,
   migrateFromLocalStorage,
 } from './idb'
-import { createDemoFlow } from './demo-flow'
+import { createDemoFlow, DEMO_FLOW_ID } from './demo-flow'
 
 // ─── Zustand store — IndexedDB-backed via localforage ──────
 export const useStore = create<AppStore>((set, get) => ({
@@ -79,7 +79,23 @@ export async function initStore(): Promise<void> {
   const flows = await getAllFlows()
   const submissions = await getAllSubmissions()
 
-  // Seed demo flow if the store is completely empty
+  // De-duplicate: remove any extra demo flows created by the old random-ID seeder
+  const demoFlows = flows.filter(
+    (f) => f.name === 'OAuth Client Registration (Demo)' || f.id === DEMO_FLOW_ID
+  )
+  if (demoFlows.length > 1) {
+    // Keep only the one with the canonical DEMO_FLOW_ID (or the first one)
+    const keep = demoFlows.find((f) => f.id === DEMO_FLOW_ID) ?? demoFlows[0]
+    for (const dup of demoFlows) {
+      if (dup.id !== keep.id) {
+        const idx = flows.indexOf(dup)
+        if (idx >= 0) flows.splice(idx, 1)
+        await idbDeleteFlow(dup.id)
+      }
+    }
+  }
+
+  // Seed demo flow if no flows exist at all
   if (flows.length === 0) {
     const demo = createDemoFlow()
     await putFlow(demo)
