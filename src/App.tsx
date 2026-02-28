@@ -8,6 +8,7 @@ import { AIFlowBuilderPage } from './pages/AIFlowBuilderPage'
 import { OnboardPage } from './pages/OnboardPage'
 import { SubmissionsPage } from './pages/SubmissionsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { AboutPage } from './pages/AboutPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 interface ErrorBoundaryState {
@@ -68,6 +69,7 @@ function App() {
               <Route path="/submissions" element={<SubmissionsPage />} />
               <Route path="/submissions/:id" element={<SubmissionsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
