@@ -131,6 +131,11 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<AIModel[]> 
   }
 }
 
+export interface StreamOptions {
+  maxTokens?: number
+  temperature?: number
+}
+
 /**
  * Streams a chat completion, calling onChunk with each new text token.
  * Compatible with OpenAI, OpenRouter, and LM Studio APIs.
@@ -139,7 +144,8 @@ export async function streamChatCompletion(
   messages: ChatMessage[],
   onChunk: (token: string) => void,
   config?: AIConfig,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: StreamOptions
 ): Promise<string> {
   const cfg = config ?? loadAIConfig()
   if (!cfg.enabled) throw new Error('AI is not enabled')
@@ -160,8 +166,8 @@ export async function streamChatCompletion(
       model: cfg.model,
       messages,
       stream: true,
-      max_tokens: 150,
-      temperature: 0.7,
+      max_tokens: options?.maxTokens ?? 150,
+      temperature: options?.temperature ?? 0.7,
     }),
   })
 

@@ -8,9 +8,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw } from 'lucide-react'
+import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw, Sparkles, Square, AlertTriangle, Send } from 'lucide-react'
 import { streamChatCompletion, loadAIConfig } from '@/lib/ai-client'
 import { extractAnswer } from '@/lib/answer-extractor'
+import { streamCustomSQL, detectDangerousSQL, extractSQLFromResponse, CustomSQLMessage } from '@/lib/ai-sql-generator'
+import { Textarea } from '@/components/ui/Textarea'
 
 
 export function OnboardPage() {
@@ -31,13 +33,28 @@ export function OnboardPage() {
   const [startedAt] = useState(new Date())
   const [validationError, setValidationError] = useState<string | null>(null)
 
+  // AI custom SQL chat state
+  const [showCustomSQLChat, setShowCustomSQLChat] = useState(false)
+  const [customSQLMessages, setCustomSQLMessages] = useState<CustomSQLMessage[]>([])
+  const [customSQLInput, setCustomSQLInput] = useState('')
+  const [customSQLStreaming, setCustomSQLStreaming] = useState('')
+  const [isGeneratingSQL, setIsGeneratingSQL] = useState(false)
+  const [sqlWarnings, setSqlWarnings] = useState<string[]>([])
+  const [warningAcknowledged, setWarningAcknowledged] = useState(false)
+  const [copiedCustomSQL, setCopiedCustomSQL] = useState<string | null>(null)
+
   const chatEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const aiStreamAbortRef = useRef<AbortController | null>(null)
+  const customSQLAbortRef = useRef<AbortController | null>(null)
+  const customSQLEndRef = useRef<HTMLDivElement>(null)
 
   // Abort any in-flight AI stream when the component unmounts
   useEffect(() => {
-    return () => { aiStreamAbortRef.current?.abort() }
+    return () => {
+      aiStreamAbortRef.current?.abort()
+      customSQLAbortRef.current?.abort()
+    }
   }, [])
 
   useEffect(() => {
@@ -65,6 +82,11 @@ export function OnboardPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages, isTyping])
+
+  // Auto-scroll custom SQL chat
+  useEffect(() => {
+    customSQLEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [customSQLMessages, customSQLStreaming])
 
   useEffect(() => {
     if (!isComplete && !isTyping) {
@@ -331,6 +353,76 @@ Be warm and concise. Do not add unrelated commentary.`
     setCompletedSubmission(submission)
 
     addSubmission(submission)
+  }
+
+  const handleCustomSQLSubmit = async () => {
+    if (!flow || !customSQLInput.trim() || isGeneratingSQL) return
+
+    const userPrompt = customSQLInput.trim()
+    setCustomSQLInput('')
+    setSqlWarnings([])
+    setWarningAcknowledged(false)
+
+    // Add user message to history
+    const updatedHistory: CustomSQLMessage[] = [
+      ...customSQLMessages,
+      { role: 'user', content: userPrompt },
+    ]
+    setCustomSQLMessages(updatedHistory)
+
+    // Start streaming
+    setIsGeneratingSQL(true)
+    setCustomSQLStreaming('')
+
+    customSQLAbortRef.current?.abort()
+    const abortController = new AbortController()
+    customSQLAbortRef.current = abortController
+
+    try {
+      const fullText = await streamCustomSQL(
+        flow,
+        responses,
+        customSQLMessages, // pass history without the latest user message (it's added inside streamCustomSQL)
+        userPrompt,
+        (token) => {
+          setCustomSQLStreaming((prev) => prev + token)
+        },
+        undefined,
+        abortController.signal
+      )
+
+      // Check for dangerous operations
+      const extracted = extractSQLFromResponse(fullText)
+      const { warnings } = detectDangerousSQL(extracted)
+      setSqlWarnings(warnings)
+
+      // Add assistant response to history
+      setCustomSQLMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: fullText },
+      ])
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // User cancelled — keep partial output as message
+        setCustomSQLMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: customSQLStreaming || '(generation cancelled)' },
+        ])
+      } else {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        setCustomSQLMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: `Error: ${errorMsg}` },
+        ])
+      }
+    } finally {
+      setIsGeneratingSQL(false)
+      setCustomSQLStreaming('')
+    }
+  }
+
+  const handleStopGeneration = () => {
+    customSQLAbortRef.current?.abort()
   }
 
   const renderInput = (question: Question) => {
@@ -657,6 +749,171 @@ Be warm and concise. Do not add unrelated commentary.`
                 })}
               </div>
             </div>
+
+            {/* AI Custom SQL Chat */}
+            {loadAIConfig().enabled && (
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setShowCustomSQLChat((v) => !v)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-purple-500" />
+                    <span className="font-medium text-sm">Ask AI to Generate Custom SQL</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {showCustomSQLChat ? 'Collapse' : 'Expand'}
+                  </span>
+                </button>
+
+                {showCustomSQLChat && (
+                  <div className="border-t">
+                    {/* Chat history */}
+                    <div className="max-h-[300px] overflow-y-auto p-4 space-y-3 bg-muted/20">
+                      {customSQLMessages.length === 0 && !isGeneratingSQL && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          Describe the SQL you need. The AI has full context of your collected answers and schema.
+                        </p>
+                      )}
+
+                      {customSQLMessages.map((msg, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          {msg.role === 'assistant' ? (
+                            <div className="max-w-[90%] space-y-2">
+                              <div className="bg-slate-900 rounded-lg p-3">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                                    <span className="text-xs text-slate-400">AI Generated SQL</span>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(extractSQLFromResponse(msg.content))
+                                      setCopiedCustomSQL(String(idx))
+                                      setTimeout(() => setCopiedCustomSQL(null), 2000)
+                                    }}
+                                    className="text-white hover:bg-slate-800 h-6 px-2 text-xs"
+                                  >
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    {copiedCustomSQL === String(idx) ? 'Copied!' : 'Copy'}
+                                  </Button>
+                                </div>
+                                <pre className="text-sm text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                                  <code>{msg.content}</code>
+                                </pre>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl px-3 py-2 text-sm">
+                              {msg.content}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Streaming output */}
+                      {isGeneratingSQL && customSQLStreaming && (
+                        <div className="flex justify-start">
+                          <div className="max-w-[90%] space-y-2">
+                            <div className="bg-slate-900 rounded-lg p-3">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <Sparkles className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
+                                <span className="text-xs text-slate-400">Generating...</span>
+                              </div>
+                              <pre className="text-sm text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                                <code>{customSQLStreaming}</code>
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Typing indicator */}
+                      {isGeneratingSQL && !customSQLStreaming && (
+                        <div className="flex justify-start">
+                          <div className="bg-muted rounded-2xl px-4 py-3">
+                            <div className="flex space-x-1">
+                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div ref={customSQLEndRef} />
+                    </div>
+
+                    {/* Safety warnings */}
+                    {sqlWarnings.length > 0 && !warningAcknowledged && (
+                      <div className="mx-4 mt-3 mb-1 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Potentially dangerous SQL detected</p>
+                            <ul className="mt-1 text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+                              {sqlWarnings.map((w, i) => (
+                                <li key={i}>• {w}</li>
+                              ))}
+                            </ul>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setWarningAcknowledged(true)}
+                              className="mt-2 text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                            >
+                              I understand the risks
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Input area */}
+                    <div className="p-3 border-t flex items-end gap-2">
+                      <Textarea
+                        value={customSQLInput}
+                        onChange={(e) => setCustomSQLInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleCustomSQLSubmit()
+                          }
+                        }}
+                        placeholder="Describe the SQL you need, e.g. 'Insert these values into the users table'"
+                        className="flex-1 min-h-[40px] max-h-[120px] text-sm resize-none"
+                        rows={1}
+                        disabled={isGeneratingSQL}
+                      />
+                      {isGeneratingSQL ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleStopGeneration}
+                          className="flex-shrink-0 h-10"
+                        >
+                          <Square className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={handleCustomSQLSubmit}
+                          disabled={!customSQLInput.trim()}
+                          className="flex-shrink-0 h-10"
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
