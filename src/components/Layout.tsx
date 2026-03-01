@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Home, FileText, Settings, PlusCircle, Sparkles, Moon, Sun, Send, Menu, X } from 'lucide-react'
+import { Home, FileText, Settings, PlusCircle, Sparkles, Moon, Sun, Send, Menu, X, Info } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 
 export function Layout() {
@@ -20,6 +20,7 @@ export function Layout() {
     { path: '/ai-flow-builder', label: 'AI Flow Builder', icon: Sparkles },
     { path: '/submissions', label: 'Submissions', icon: FileText },
     { path: '/settings', label: 'Settings', icon: Settings },
+    { path: '/about', label: 'About', icon: Info },
   ]
 
   return (

@@ -7,8 +7,9 @@ import { generateSQL } from '@/lib/sql-generator'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Label } from '@/components/ui/Label'
 import { Select } from '@/components/ui/Select'
-import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw, Sparkles, Square, AlertTriangle, Send } from 'lucide-react'
+import { CheckCircle2, Bot, User, Copy, ArrowLeft, RotateCcw, Sparkles, Square, AlertTriangle, Send, MessageSquare, LayoutList } from 'lucide-react'
 import { streamChatCompletion, loadAIConfig } from '@/lib/ai-client'
 import { extractAnswer } from '@/lib/answer-extractor'
 import { streamCustomSQL, detectDangerousSQL, extractSQLFromResponse, CustomSQLMessage } from '@/lib/ai-sql-generator'
@@ -32,6 +33,9 @@ export function OnboardPage() {
   const [copiedSQL, setCopiedSQL] = useState(false)
   const [startedAt] = useState(new Date())
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'chat' | 'form'>('chat')
+  const [formValues, setFormValues] = useState<Record<string, string | string[]>>({})
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   // AI custom SQL chat state
   const [showCustomSQLChat, setShowCustomSQLChat] = useState(false)
@@ -537,6 +541,175 @@ Be warm and concise. Do not add unrelated commentary.`
     }
   }
 
+  const getFormResponses = (): Response[] =>
+    Object.entries(formValues).map(([questionId, value]) => ({
+      questionId,
+      value: value as string | string[],
+    }))
+
+  const renderFormInput = (question: Question, inputId: string) => {
+    const value = formValues[question.id]
+    const updateValue = (val: string | string[]) => {
+      setFormValues((prev) => ({ ...prev, [question.id]: val }))
+      setFormErrors((prev) => { const n = { ...prev }; delete n[question.id]; return n })
+    }
+
+    switch (question.type) {
+      case 'email':
+      case 'phone':
+      case 'text':
+        return (
+          <Input
+            id={inputId}
+            type={question.type === 'email' ? 'email' : question.type === 'phone' ? 'tel' : 'text'}
+            value={(value as string) ?? ''}
+            onChange={(e) => updateValue(e.target.value)}
+            placeholder={question.placeholder || 'Type your answer...'}
+          />
+        )
+
+      case 'number':
+        return (
+          <Input
+            id={inputId}
+            type="number"
+            value={(value as string) ?? ''}
+            onChange={(e) => updateValue(e.target.value)}
+            placeholder={question.placeholder || 'Enter a number...'}
+          />
+        )
+
+      case 'date':
+        return (
+          <Input
+            id={inputId}
+            type="date"
+            value={(value as string) ?? ''}
+            onChange={(e) => updateValue(e.target.value)}
+          />
+        )
+
+      case 'single-select':
+        return (
+          <Select
+            id={inputId}
+            value={(value as string) ?? ''}
+            onChange={(e) => updateValue(e.target.value)}
+          >
+            <option value="">Select an option...</option>
+            {question.options?.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
+        )
+
+      case 'multi-select':
+        return (
+          <div className="space-y-2">
+            {question.options?.map((option) => (
+              <label key={option} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={((value as string[]) ?? []).includes(option)}
+                  onChange={(e) => {
+                    const current = (value as string[]) ?? []
+                    updateValue(e.target.checked ? [...current, option] : current.filter((v) => v !== option))
+                  }}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-sm">{option}</span>
+              </label>
+            ))}
+          </div>
+        )
+
+      case 'yes-no':
+        return (
+          <div className="flex space-x-2">
+            <Button
+              type="button"
+              variant={value === 'yes' ? 'default' : 'outline'}
+              onClick={() => updateValue('yes')}
+              className="flex-1"
+            >
+              Yes
+            </Button>
+            <Button
+              type="button"
+              variant={value === 'no' ? 'default' : 'outline'}
+              onClick={() => updateValue('no')}
+              className="flex-1"
+            >
+              No
+            </Button>
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  const handleFormSubmit = () => {
+    if (!flow) return
+
+    const formResponses = getFormResponses()
+    const visibleQuestions = flow.questions.filter((q) => shouldShowQuestion(q, formResponses))
+
+    const errors: Record<string, string> = {}
+    for (const question of visibleQuestions) {
+      const val = formValues[question.id] ?? (question.type === 'multi-select' ? [] : '')
+      const error = validateAnswer(question, val)
+      if (error) errors[question.id] = error
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
+    const finalResponses: Response[] = visibleQuestions.map((q) => ({
+      questionId: q.id,
+      value: (formValues[q.id] ?? (q.type === 'multi-select' ? [] : null)) as string | string[] | null,
+    }))
+
+    completeOnboarding(finalResponses)
+  }
+
+  const renderFormView = () => {
+    if (!flow) return null
+
+    const visibleQuestions = flow.questions.filter((q) => shouldShowQuestion(q, getFormResponses()))
+
+    return (
+      <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
+        {visibleQuestions.map((question) => {
+          const inputId = `field-${question.id}`
+          return (
+            <div key={question.id} className="space-y-1.5">
+              <Label htmlFor={inputId}>
+                {question.label}
+                {question.required && <span className="text-red-500 ml-1">*</span>}
+              </Label>
+              {question.helpText && (
+                <p className="text-xs text-muted-foreground">{question.helpText}</p>
+              )}
+              {renderFormInput(question, inputId)}
+              {formErrors[question.id] && (
+                <p className="text-sm text-red-500">{formErrors[question.id]}</p>
+              )}
+            </div>
+          )
+        })}
+        <Button type="button" onClick={handleFormSubmit} className="w-full" size="lg">
+          Submit
+        </Button>
+      </div>
+    )
+  }
+
   if (!flow) {
     return <div>Loading...</div>
   }
@@ -562,11 +735,30 @@ Be warm and concise. Do not add unrelated commentary.`
               <p className="text-xs text-muted-foreground mt-0.5">Complete</p>
             )}
           </div>
-          <div className="w-16"></div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant={viewMode === 'chat' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('chat')}
+              title="Chat mode"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1.5">Chat</span>
+            </Button>
+            <Button
+              variant={viewMode === 'form' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('form')}
+              title="Form mode"
+            >
+              <LayoutList className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1.5">Form</span>
+            </Button>
+          </div>
         </div>
 
-        {/* Progress bar */}
-        {!isComplete && (
+        {/* Progress bar (chat mode only) */}
+        {!isComplete && viewMode === 'chat' && (
           <div className="h-1 bg-muted">
             <div
               className="h-1 bg-primary transition-all duration-500"
@@ -575,127 +767,139 @@ Be warm and concise. Do not add unrelated commentary.`
           </div>
         )}
 
-        <div className="h-[60vh] min-h-[300px] max-h-[600px] overflow-y-auto p-4 sm:p-6 space-y-4 bg-muted/30">
-          <AnimatePresence>
-            {chatMessages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {message.type === 'bot' && (
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-5 w-5 text-white" />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[80%] sm:max-w-[70%] rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base ${
-                    message.type === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-foreground'
-                  }`}
+        {/* Chat mode view */}
+        {viewMode === 'chat' && (
+          <>
+            <div className="h-[60vh] min-h-[300px] max-h-[600px] overflow-y-auto p-4 sm:p-6 space-y-4 bg-muted/30">
+              <AnimatePresence>
+                {chatMessages.map((message) => (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {message.type === 'bot' && (
+                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                        <Bot className="h-5 w-5 text-white" />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[80%] sm:max-w-[70%] rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base ${
+                        message.type === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-foreground'
+                      }`}
+                    >
+                      {message.content}
+                    </div>
+                    {message.type === 'user' && (
+                      <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
+                        <User className="h-5 w-5 text-gray-600" />
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {isTyping && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-start"
                 >
-                  {message.content}
-                </div>
-                {message.type === 'user' && (
-                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-                    <User className="h-5 w-5 text-gray-600" />
+                  <div className="bg-muted rounded-2xl px-4 py-3">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
                   </div>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                </motion.div>
+              )}
 
-          {isTyping && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex justify-start"
-            >
-              <div className="bg-muted rounded-2xl px-4 py-3">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                </div>
-              </div>
-            </motion.div>
-          )}
+              <div ref={chatEndRef} />
+            </div>
 
-          <div ref={chatEndRef} />
-        </div>
+            {!isComplete && currentQuestion && !isTyping && (
+              <div className="border-t p-3 sm:p-4 bg-card">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  {responses.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        // Remove last response
+                        const prevResponses = responses.slice(0, -1)
+                        const lastResponse = responses[responses.length - 1]
+                        setResponses(prevResponses)
 
-        {!isComplete && currentQuestion && !isTyping && (
-          <div className="border-t p-3 sm:p-4 bg-card">
-            <div className="flex items-center gap-2 sm:gap-3">
-              {responses.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // Remove last response
-                    const prevResponses = responses.slice(0, -1)
-                    const lastResponse = responses[responses.length - 1]
-                    setResponses(prevResponses)
-
-                    // Find the question index for the previous response
-                    const prevQIdx = flow.questions.findIndex((q) => q.id === lastResponse.questionId)
-                    if (prevQIdx >= 0) {
-                      setValidationError(null)
-                      // Remove last user+bot messages from chat
-                      setChatMessages((prev) => {
-                        const msgs = [...prev]
-                        // Remove from the end: last user message and the bot message before it
-                        let removed = 0
-                        for (let i = msgs.length - 1; i >= 0 && removed < 2; i--) {
-                          if (msgs[i].type === 'user' || (msgs[i].type === 'bot' && msgs[i].questionId === lastResponse.questionId)) {
-                            msgs.splice(i, 1)
-                            removed++
+                        // Find the question index for the previous response
+                        const prevQIdx = flow.questions.findIndex((q) => q.id === lastResponse.questionId)
+                        if (prevQIdx >= 0) {
+                          setValidationError(null)
+                          // Remove last user+bot messages from chat
+                          setChatMessages((prev) => {
+                            const msgs = [...prev]
+                            // Remove from the end: last user message and the bot message before it
+                            let removed = 0
+                            for (let i = msgs.length - 1; i >= 0 && removed < 2; i--) {
+                              if (msgs[i].type === 'user' || (msgs[i].type === 'bot' && msgs[i].questionId === lastResponse.questionId)) {
+                                msgs.splice(i, 1)
+                                removed++
+                              }
+                            }
+                            return msgs
+                          })
+                          setCurrentQuestionIndex(prevQIdx)
+                          const prevValue = lastResponse.value
+                          if (Array.isArray(prevValue)) {
+                            setCurrentValue(prevValue)
+                          } else {
+                            setCurrentValue(prevValue != null ? String(prevValue) : '')
                           }
                         }
-                        return msgs
-                      })
-                      setCurrentQuestionIndex(prevQIdx)
-                      const prevValue = lastResponse.value
-                      if (Array.isArray(prevValue)) {
-                        setCurrentValue(prevValue)
-                      } else {
-                        setCurrentValue(prevValue != null ? String(prevValue) : '')
-                      }
-                    }
-                  }}
-                  title="Go back to previous question"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </Button>
-              )}
-              <div className="flex-1">{renderInput(currentQuestion)}</div>
-              {currentQuestion.type !== 'yes-no' && currentQuestion.type !== 'single-select' && (
-                <Button onClick={() => handleSubmitAnswer()} size="lg" className="px-8">
-                  Advance
-                </Button>
-              )}
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                <User className="h-5 w-5 text-muted-foreground" />
+                      }}
+                      title="Go back to previous question"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <div className="flex-1">{renderInput(currentQuestion)}</div>
+                  {currentQuestion.type !== 'yes-no' && currentQuestion.type !== 'single-select' && (
+                    <Button onClick={() => handleSubmitAnswer()} size="lg" className="px-8">
+                      Advance
+                    </Button>
+                  )}
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <User className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                </div>
+                {validationError && (
+                  <p className="text-sm text-red-500 mt-1 ml-12">{validationError}</p>
+                )}
+                {!currentQuestion.required && (
+                  <button
+                    onClick={() => {
+                      setValidationError(null)
+                      handleSubmitAnswer('')
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground mt-2"
+                  >
+                    Skip this question
+                  </button>
+                )}
               </div>
-            </div>
-            {validationError && (
-              <p className="text-sm text-red-500 mt-1 ml-12">{validationError}</p>
             )}
-            {!currentQuestion.required && (
-              <button
-                onClick={() => {
-                  setValidationError(null)
-                  handleSubmitAnswer('')
-                }}
-                className="text-sm text-muted-foreground hover:text-foreground mt-2"
-              >
-                Skip this question
-              </button>
-            )}
+          </>
+        )}
+
+        {/* Form mode view */}
+        {viewMode === 'form' && !isComplete && (
+          <div className="h-[60vh] min-h-[300px] max-h-[600px] overflow-y-auto bg-background">
+            {renderFormView()}
           </div>
         )}
 
