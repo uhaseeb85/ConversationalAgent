@@ -3,7 +3,7 @@
  * AI-powered onboarding flow creation wizard
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -12,11 +12,19 @@ import { Textarea } from '../components/ui/Textarea'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { buildSchemaContext, schemaContextToMarkdown, type SchemaContext } from '../lib/schema-context-builder'
-import { generateQuestionsFromPurpose, generateSQLOperations, validateOperationSafety } from '../lib/ai-flow-generator'
+import {
+  generateQuestionsFromPurpose,
+  generateSQLOperations,
+  validateOperationSafety,
+  streamSQLOperationsChat,
+  extractOperationsFromChatResponse,
+  type SQLChatMessage,
+} from '../lib/ai-flow-generator'
 import { loadAIConfig } from '../lib/ai-client'
 import { generateSQL } from '../lib/sql-generator'
 import { useStore } from '../lib/store'
 import { generateId } from '../lib/utils'
+import { Sparkles, Copy, Square } from 'lucide-react'
 import type { Question, SQLOperation, OnboardingFlow } from '../types'
 
 const STEPS = [
@@ -92,6 +100,15 @@ export function AIFlowBuilderPage() {
   const [warnings, setWarnings] = useState<string[]>([])
   const [aiEnabled, setAiEnabled] = useState(false)
   const [isDemoMode, setIsDemoMode] = useState(false)
+
+  // SQL chat state (Step 4)
+  const [sqlChatMessages, setSqlChatMessages] = useState<SQLChatMessage[]>([])
+  const [sqlChatInput, setSqlChatInput] = useState('')
+  const [sqlChatStreaming, setSqlChatStreaming] = useState('')
+  const [isSQLChatStreaming, setIsSQLChatStreaming] = useState(false)
+  const [pendingOperations, setPendingOperations] = useState<SQLOperation[] | null>(null)
+  const sqlChatAbortRef = useRef<AbortController | null>(null)
+  const sqlChatEndRef = useRef<HTMLDivElement>(null)
 
   // Check AI configuration on mount
   useEffect(() => {
@@ -264,6 +281,50 @@ export function AIFlowBuilderPage() {
       setError(`Failed to save flow: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleSQLChatSend() {
+    const msg = sqlChatInput.trim()
+    if (!msg || isSQLChatStreaming || !schema) return
+    setSqlChatInput('')
+    setSqlChatMessages((prev) => [...prev, { role: 'user', content: msg }])
+    setSqlChatStreaming('')
+    setIsSQLChatStreaming(true)
+    setPendingOperations(null)
+    sqlChatAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    sqlChatAbortRef.current = ctrl
+    let accumulated = ''
+    try {
+      await streamSQLOperationsChat(
+        questions,
+        sqlOperations,
+        schema,
+        sqlChatMessages,
+        msg,
+        (token) => {
+          accumulated += token
+          setSqlChatStreaming((prev) => prev + token)
+        },
+        ctrl.signal
+      )
+      setSqlChatMessages((prev) => [...prev, { role: 'assistant', content: accumulated }])
+      const extracted = extractOperationsFromChatResponse(accumulated)
+      if (extracted) setPendingOperations(extracted)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setSqlChatMessages((prev) => [...prev, { role: 'assistant', content: accumulated || '(cancelled)' }])
+      } else {
+        setSqlChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` },
+        ])
+      }
+    } finally {
+      setSqlChatStreaming('')
+      setIsSQLChatStreaming(false)
+      setTimeout(() => sqlChatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }
 
@@ -590,83 +651,190 @@ export function AIFlowBuilderPage() {
         {/* Step 4: SQL Operations */}
         {currentStep === 4 && (
           <div>
-            <h2 className="text-xl font-bold mb-4">Step 4: SQL Operations</h2>
-            <p className="text-gray-600 mb-6">
-              AI will generate SQL operations to persist the collected data.
+            <h2 className="text-xl font-bold mb-2">Step 4: SQL Operations</h2>
+            <p className="text-gray-600 mb-4 text-sm">
+              AI maps your questions to database operations. Use the chat on the right to refine the logic — e.g. <em>"do an UPDATE if the email already exists"</em>.
             </p>
 
-            {sqlOperations.length === 0 ? (
-              <div className="text-center py-8">
-                <Button onClick={handleGenerateSQLOperations} disabled={loading}>
-                  {loading ? 'Generating...' : isDemoMode ? '🎭 Load Demo SQL Mappings' : '🪄 Generate SQL Mappings'}
-                </Button>
-              </div>
-            ) : (
-              <div>
-                <div className="mb-4 flex justify-between items-center">
-                  <p className="text-sm text-gray-600">{sqlOperations.length} operations generated</p>
-                  <Button onClick={handleGenerateSQLOperations} variant="outline" disabled={loading}>
-                    {isDemoMode ? 'Reload Demo' : 'Regenerate'}
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {sqlOperations.map((op) => (
-                    <Card key={op.id} className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge
-                              className={
-                                op.operationType === 'INSERT'
-                                  ? 'bg-green-600'
-                                  : op.operationType === 'UPDATE'
-                                  ? 'bg-yellow-600'
-                                  : 'bg-red-600'
-                              }
-                            >
-                              {op.operationType}
-                            </Badge>
-                            <span className="font-semibold">{op.tableName}</span>
-                          </div>
-                          <div className="text-sm text-gray-600 space-y-1">
-                            <div>
-                              <strong>Column Mappings:</strong>
-                              <ul className="list-disc ml-5">
-                                {op.columnMappings.map((m, i) => (
-                                  <li key={i}>
-                                    <code className="bg-gray-100 px-1 rounded">{m.columnName}</code> ← Question ID: {m.questionId}
-                                  </li>
-                                ))}
-                              </ul>
+            <div className="flex gap-4" style={{ height: '520px' }}>
+              {/* Left panel: current operations */}
+              <div className="w-2/5 flex flex-col gap-3 overflow-y-auto pr-1">
+                {sqlOperations.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-lg text-gray-500">
+                    <p className="text-sm">No operations yet.</p>
+                    <Button onClick={handleGenerateSQLOperations} disabled={loading}>
+                      {loading ? 'Generating…' : isDemoMode ? '🎭 Load Demo' : '🪄 Generate'}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center shrink-0">
+                      <span className="text-sm font-medium text-gray-700">
+                        {sqlOperations.length} operation{sqlOperations.length !== 1 ? 's' : ''}
+                      </span>
+                      <Button variant="outline" onClick={handleGenerateSQLOperations} disabled={loading}>
+                        {isDemoMode ? 'Reload Demo' : 'Regenerate'}
+                      </Button>
+                    </div>
+                    {sqlOperations.map((op) => (
+                      <Card key={op.id} className="p-3 shrink-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge
+                                className={
+                                  op.operationType === 'INSERT'
+                                    ? 'bg-green-600'
+                                    : op.operationType === 'UPDATE'
+                                    ? 'bg-yellow-600'
+                                    : 'bg-red-600'
+                                }
+                              >
+                                {op.operationType}
+                              </Badge>
+                              <span className="font-semibold text-sm truncate">{op.tableName}</span>
                             </div>
+                            {op.label && <p className="text-xs text-gray-500 mb-1">{op.label}</p>}
+                            <ul className="text-xs text-gray-600 space-y-0.5">
+                              {op.columnMappings.map((m, i) => (
+                                <li key={i}>
+                                  <code className="bg-gray-100 px-1 rounded">{m.columnName}</code> ← {m.questionId}
+                                </li>
+                              ))}
+                            </ul>
                             {op.conditions && op.conditions.length > 0 && (
-                              <div>
-                                <strong>Conditions:</strong>
-                                <ul className="list-disc ml-5">
-                                  {op.conditions.map((c, i) => (
-                                    <li key={i}>
-                                      {c.columnName} {c.operator} {c.value}
-                                    </li>
-                                  ))}
-                                </ul>
+                              <div className="mt-1 text-xs text-gray-500">
+                                <strong>WHERE:</strong>{' '}
+                                {op.conditions.map((c) => `${c.columnName} ${c.operator} ${c.value}`).join(', ')}
                               </div>
                             )}
                           </div>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleRemoveOperation(op.id)}
+                            className="shrink-0"
+                          >
+                            Remove
+                          </Button>
                         </div>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleRemoveOperation(op.id)}
-                          className="ml-4"
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </Card>
+                      </Card>
+                    ))}
+                  </>
+                )}
+              </div>
+
+              {/* Right panel: AI chat */}
+              <div className="flex-1 flex flex-col border rounded-lg overflow-hidden bg-white">
+                <div className="flex items-center gap-2 px-3 py-2 border-b bg-slate-50 shrink-0">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  <span className="text-sm font-medium">Refine with AI</span>
+                </div>
+
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-muted/10">
+                  {sqlChatMessages.length === 0 && !isSQLChatStreaming && (
+                    <p className="text-sm text-gray-400 text-center py-8">
+                      Generate operations first, then describe changes here.<br />
+                      e.g. <em>"Do an UPDATE if client_id already exists, INSERT otherwise"</em>
+                    </p>
+                  )}
+                  {sqlChatMessages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'user' ? (
+                        <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl px-3 py-2 text-sm">
+                          {msg.content}
+                        </div>
+                      ) : (
+                        <div className="w-full space-y-2">
+                          <div className="bg-slate-900 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-1.5">
+                                <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                                <span className="text-xs text-slate-400">AI</span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                onClick={() => { void navigator.clipboard.writeText(msg.content) }}
+                                className="text-white hover:bg-slate-800 h-6 px-2 text-xs"
+                              >
+                                <Copy className="h-3 w-3 mr-1" />Copy
+                              </Button>
+                            </div>
+                            <pre className="text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                              {msg.content}
+                            </pre>
+                          </div>
+                          {idx === sqlChatMessages.length - 1 && pendingOperations && (
+                            <Button
+                              className="w-full"
+                              onClick={() => {
+                                setSqlOperations(pendingOperations)
+                                setPendingOperations(null)
+                                setSqlChatMessages((prev) => [
+                                  ...prev,
+                                  { role: 'assistant', content: `✅ Applied ${pendingOperations.length} operation${pendingOperations.length !== 1 ? 's' : ''}.` },
+                                ])
+                              }}
+                            >
+                              ✅ Apply {pendingOperations.length} operation{pendingOperations.length !== 1 ? 's' : ''}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ))}
+                  {isSQLChatStreaming && sqlChatStreaming && (
+                    <div className="flex justify-start">
+                      <div className="w-full bg-slate-900 rounded-lg p-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Sparkles className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
+                          <span className="text-xs text-slate-400">Generating…</span>
+                        </div>
+                        <pre className="text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                          {sqlChatStreaming}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={sqlChatEndRef} />
+                </div>
+
+                {/* Input */}
+                <div className="border-t p-2 flex gap-2 shrink-0">
+                  <Textarea
+                    value={sqlChatInput}
+                    onChange={(e) => setSqlChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        void handleSQLChatSend()
+                      }
+                    }}
+                    placeholder="Describe the SQL logic you want… (Enter to send, Shift+Enter for new line)"
+                    rows={2}
+                    className="flex-1 resize-none text-sm"
+                    disabled={isSQLChatStreaming}
+                  />
+                  {isSQLChatStreaming ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => sqlChatAbortRef.current?.abort()}
+                      className="self-end"
+                    >
+                      <Square className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => void handleSQLChatSend()}
+                      disabled={!sqlChatInput.trim() || sqlOperations.length === 0}
+                      className="self-end"
+                    >
+                      Send
+                    </Button>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 

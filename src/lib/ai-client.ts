@@ -166,7 +166,7 @@ export async function streamChatCompletion(
       model: cfg.model,
       messages,
       stream: true,
-      max_tokens: options?.maxTokens ?? 150,
+      max_tokens: options?.maxTokens ?? 32768,
       temperature: options?.temperature ?? 0.7,
     }),
   })
@@ -212,7 +212,8 @@ export async function streamChatCompletion(
  */
 export async function chatCompletion(
   messages: ChatMessage[],
-  config?: AIConfig
+  config?: AIConfig,
+  maxTokens = 32768
 ): Promise<string> {
   const cfg = config ?? loadAIConfig()
   if (!cfg.enabled) throw new Error('AI is not enabled')
@@ -231,7 +232,7 @@ export async function chatCompletion(
       model: cfg.model,
       messages,
       stream: false,
-      max_tokens: 200,
+      max_tokens: maxTokens,
       temperature: 0.3,
     }),
   })

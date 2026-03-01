@@ -3,7 +3,7 @@
  * AI-powered onboarding flow generation with safety guardrails
  */
 
-import { chatCompletion, loadAIConfig, type ChatMessage } from './ai-client'
+import { chatCompletion, streamChatCompletion, loadAIConfig, type ChatMessage } from './ai-client'
 import { schemaContextToJSON, type SchemaContext } from './schema-context-builder'
 import { validateSQLIdentifier } from './sql-generator'
 import type { Question, QuestionType, SQLOperation } from '../types'
@@ -18,6 +18,27 @@ const VALID_QUESTION_TYPES: QuestionType[] = [
   'multi-select',
   'yes-no',
 ]
+
+/**
+ * Attempts to recover a complete JSON array from a truncated string by
+ * progressively stripping incomplete trailing elements until the text parses.
+ */
+function repairTruncatedJSONArray(text: string): unknown[] | null {
+  // Strip any trailing comma / whitespace before trying to close the array
+  let candidate = text.trimEnd().replace(/,\s*$/, '') + ']'
+  for (let i = 0; i < 20; i++) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown[]
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      // Remove the last incomplete element: strip back to the previous '}'
+      const lastBrace = candidate.lastIndexOf('}')
+      if (lastBrace === -1) return null
+      candidate = candidate.substring(0, lastBrace + 1).trimEnd().replace(/,\s*$/, '') + ']'
+    }
+  }
+  return null
+}
 
 /**
  * System prompt for AI flow generation with guardrails
@@ -143,14 +164,21 @@ Generate 3-8 relevant questions based on the purpose and schema. Use appropriate
     let parsed: Question[]
     try {
       parsed = JSON.parse(jsonText) as Question[]
-    } catch (parseErr) {
-      console.error('Failed to parse AI response as JSON:', jsonText)
-      throw new Error(
-        `AI returned malformed JSON (likely truncated). ` +
-        `This usually means the response was too long. ` +
-        `Try simplifying your purpose or schema. ` +
-        `JSON received: "${jsonText.substring(0, 300)}..."`
-      )
+    } catch {
+      // Attempt to recover complete objects from a truncated JSON array
+      const repaired = repairTruncatedJSONArray(jsonText)
+      if (repaired !== null && repaired.length > 0) {
+        console.warn('AI response was truncated; recovered', repaired.length, 'question(s) from partial JSON.')
+        parsed = repaired as Question[]
+      } else {
+        console.error('Failed to parse AI response as JSON:', jsonText)
+        throw new Error(
+          `AI returned malformed JSON (likely truncated). ` +
+          `This usually means the response was too long. ` +
+          `Try simplifying your purpose or schema. ` +
+          `JSON received: "${jsonText.substring(0, 300)}..."`
+        )
+      }
     }
     
     // Validate and sanitize
@@ -280,14 +308,20 @@ Guidelines:
     let parsed: SQLOperation[]
     try {
       parsed = JSON.parse(jsonText) as SQLOperation[]
-    } catch (parseErr) {
-      console.error('Failed to parse AI response as JSON:', jsonText)
-      throw new Error(
-        `AI returned malformed JSON (likely truncated). ` +
-        `This usually means the response was too long. ` +
-        `Try simplifying your questions or schema. ` +
-        `JSON received: "${jsonText.substring(0, 300)}..."`
-      )
+    } catch {
+      const repaired = repairTruncatedJSONArray(jsonText)
+      if (repaired !== null && repaired.length > 0) {
+        console.warn('AI response was truncated; recovered', repaired.length, 'SQL operation(s) from partial JSON.')
+        parsed = repaired as SQLOperation[]
+      } else {
+        console.error('Failed to parse AI response as JSON:', jsonText)
+        throw new Error(
+          `AI returned malformed JSON (likely truncated). ` +
+          `This usually means the response was too long. ` +
+          `Try simplifying your questions or schema. ` +
+          `JSON received: "${jsonText.substring(0, 300)}..."`
+        )
+      }
     }
     
     // Validate and sanitize
@@ -458,4 +492,97 @@ export function validateOperationSafety(operations: SQLOperation[]): {
     criticalWarnings,
     warnings,
   }
+}
+
+export interface SQLChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/**
+ * Stream a conversational SQL-operations refinement chat.
+ * The AI responds with an explanation + a ```json block with the full updated SQLOperation[].
+ */
+export async function streamSQLOperationsChat(
+  questions: Question[],
+  currentOperations: SQLOperation[],
+  schema: SchemaContext,
+  history: SQLChatMessage[],
+  userMessage: string,
+  onChunk: (token: string) => void,
+  signal?: AbortSignal
+): Promise<string> {
+  const config = loadAIConfig()
+  if (!config.enabled) throw new Error('AI is not enabled. Please enable it in Settings.')
+
+  const systemPrompt = `You are an expert SQL operations designer for a form-builder application.
+
+The user has a set of questions in their onboarding flow. Each question collects a value that will be persisted to a database.
+SQL operations define HOW those values are persisted (INSERT, UPDATE, or DELETE).
+
+## Current Questions:
+${JSON.stringify(questions.map((q) => ({ id: q.id, label: q.label, type: q.type, sqlColumnName: q.sqlColumnName, tableName: q.tableName })), null, 2)}
+
+## Current SQL Operations:
+${JSON.stringify(currentOperations, null, 2)}
+
+## Database Schema:
+${JSON.stringify(schema, null, 2)}
+
+## Your job:
+- Listen to the user's requests to add, modify, or replace SQL operations.
+- Respond conversationally — explain what you're doing and why.
+- Always end your response with a fenced JSON code block containing the COMPLETE updated SQLOperation[] array.
+- The array must include ALL operations (both unchanged and new/modified).
+- Use question IDs from the questions list for columnMappings.questionId.
+- For UPDATE: always include WHERE conditions.
+- For DELETE: always include WHERE conditions. Never delete all rows.
+- Never generate DROP, TRUNCATE, or DDL.
+
+## SQLOperation structure:
+\`\`\`
+{
+  "id": "unique-id",
+  "operationType": "INSERT" | "UPDATE" | "DELETE",
+  "tableName": "table_name",
+  "label": "Human readable label",
+  "columnMappings": [{ "questionId": "q_id", "columnName": "col_name" }],
+  "conditions": [{ "columnName": "col", "operator": "=", "value": "val" }],
+  "order": 0
+}
+\`\`\`
+
+Always end your reply with the complete JSON block even if no changes are needed.`
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    ...history.map((m) => ({ role: m.role, content: m.content } as ChatMessage)),
+    { role: 'user', content: userMessage },
+  ]
+
+  return streamChatCompletion(messages, onChunk, config, signal, {
+    maxTokens: 32768,
+    temperature: 0.3,
+  })
+}
+
+/**
+ * Extract a SQLOperation[] from an AI chat response that contains a ```json block.
+ * Returns null if no valid array is found.
+ */
+export function extractOperationsFromChatResponse(response: string): SQLOperation[] | null {
+  const match = /```(?:json)?\s*([\s\S]*?)\s*```/.exec(response)
+  if (!match) return null
+  try {
+    const parsed = JSON.parse(match[1]) as unknown
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return (parsed as SQLOperation[]).map((op, idx) => ({
+        ...op,
+        id: op.id || `op${Date.now()}_${idx}`,
+        conditions: op.conditions ?? [],
+        order: op.order ?? idx,
+      }))
+    }
+  } catch { /* ignore */ }
+  return null
 }
