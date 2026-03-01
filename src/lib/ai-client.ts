@@ -139,7 +139,8 @@ export async function streamChatCompletion(
   messages: ChatMessage[],
   onChunk: (token: string) => void,
   config?: AIConfig,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  maxTokens?: number
 ): Promise<string> {
   const cfg = config ?? loadAIConfig()
   if (!cfg.enabled) throw new Error('AI is not enabled')
@@ -160,7 +161,7 @@ export async function streamChatCompletion(
       model: cfg.model,
       messages,
       stream: true,
-      max_tokens: 150,
+      max_tokens: maxTokens ?? 150,
       temperature: 0.7,
     }),
   })

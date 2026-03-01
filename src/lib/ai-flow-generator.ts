@@ -3,7 +3,7 @@
  * AI-powered onboarding flow generation with safety guardrails
  */
 
-import { chatCompletion, loadAIConfig, type ChatMessage } from './ai-client'
+import { chatCompletion, streamChatCompletion, loadAIConfig, type ChatMessage } from './ai-client'
 import { schemaContextToJSON, type SchemaContext } from './schema-context-builder'
 import { validateSQLIdentifier } from './sql-generator'
 import type { Question, QuestionType, SQLOperation } from '../types'
@@ -424,6 +424,144 @@ Return the updated Question object as JSON. Return ONLY the JSON object, no mark
   if (!Array.isArray(parsed.validationRules)) parsed.validationRules = []
 
   return parsed
+}
+
+/**
+ * System prompt for the conversational DML builder.
+ * Guides the LLM to ask clarifying questions until it has enough information,
+ * then emit OPERATIONS_FINAL: followed by a JSON array of SQLOperation objects.
+ */
+const SQL_CONVERSATION_SYSTEM_PROMPT = `You are a helpful SQL DML advisor for a conversational form builder.
+Your job is to help users design SQL DML operations (INSERT, UPDATE, DELETE) that will store the answers collected from a customer/user form.
+
+You have access to:
+1. The form questions (with their IDs, labels, and column name hints)
+2. The database schema (available tables and columns)
+
+Your process:
+- Ask ONE clarifying question at a time about what DML operations are needed
+- Understand which tables to write to, which operation types (INSERT/UPDATE/DELETE), which question answers map to which columns, and any WHERE conditions needed
+- Keep your responses concise and friendly
+
+When you have gathered all necessary information AND the user confirms they are ready, output the finalized operations in this EXACT format (with nothing before or after):
+OPERATIONS_FINAL:
+[JSON array here]
+
+The JSON must be an array of SQLOperation objects with this structure:
+[
+  {
+    "id": "op1",
+    "operationType": "INSERT",
+    "tableName": "table_name",
+    "label": "Human-readable label",
+    "columnMappings": [
+      { "questionId": "question-id", "columnName": "column_name" }
+    ],
+    "conditions": [],
+    "order": 0
+  }
+]
+
+Rules for the JSON:
+- operationType must be INSERT, UPDATE, or DELETE
+- columnMappings must reference valid question IDs from the provided list
+- UPDATE and DELETE must include WHERE conditions in the "conditions" array
+- Never output partial JSON; only emit OPERATIONS_FINAL when the full array is ready`
+
+/**
+ * Holds a streaming conversation with the LLM to collaboratively design SQL operations.
+ * The LLM asks clarifying questions and, when ready, emits OPERATIONS_FINAL: <JSON>.
+ *
+ * @param messages   Full conversation so far (user + assistant turns)
+ * @param questions  Questions from the current flow (provides question IDs and hints)
+ * @param schema     Database schema context
+ * @param onChunk    Callback called with each streamed token so the UI can update live
+ * @param signal     Optional AbortSignal to cancel the stream
+ * @returns reply text and, if the LLM finalised the operations, a parsed operations array
+ */
+export async function converseSQLOperations(
+  messages: ChatMessage[],
+  questions: Question[],
+  schema: SchemaContext,
+  onChunk: (token: string) => void,
+  signal?: AbortSignal
+): Promise<{ reply: string; operations?: SQLOperation[] }> {
+  const config = loadAIConfig()
+  if (!config.enabled) {
+    throw new Error('AI is not enabled. Please enable it in Settings.')
+  }
+
+  const schemaJSON = schemaContextToJSON(schema)
+  const questionSummary = questions
+    .map((q) => `  - ID: "${q.id}" | Label: "${q.label}" | Type: ${q.type}${q.sqlColumnName ? ` | Hints at column: ${q.sqlColumnName}` : ''}${q.tableName ? ` | Hints at table: ${q.tableName}` : ''}`)
+    .join('\n')
+
+  const systemContent = `${SQL_CONVERSATION_SYSTEM_PROMPT}
+
+Available form questions:
+${questionSummary}
+
+Database schema:
+${schemaJSON}`
+
+  const fullMessages: ChatMessage[] = [
+    { role: 'system', content: systemContent },
+    ...messages,
+  ]
+
+  const reply = await streamChatCompletion(fullMessages, onChunk, config, signal, 2000)
+
+  // Detect whether the LLM has finalised the operations
+  const finalMarker = 'OPERATIONS_FINAL:'
+  const markerIdx = reply.indexOf(finalMarker)
+  if (markerIdx === -1) {
+    return { reply }
+  }
+
+  const jsonText = reply.slice(markerIdx + finalMarker.length).trim()
+
+  // Strip optional markdown code fence
+  const fenced = /```(?:json)?\s*([\s\S]*?)\s*```/.exec(jsonText)
+  const rawJson = fenced ? fenced[1].trim() : jsonText
+
+  if (!rawJson.startsWith('[')) {
+    return { reply }
+  }
+
+  try {
+    const parsed = JSON.parse(rawJson) as SQLOperation[]
+    const warnings: string[] = []
+    const operations: SQLOperation[] = []
+
+    parsed.forEach((op, idx) => {
+      if (!['INSERT', 'UPDATE', 'DELETE'].includes(op.operationType)) {
+        warnings.push(`Operation ${idx + 1}: invalid type "${op.operationType}" — skipped`)
+        return
+      }
+      if (!op.tableName) {
+        warnings.push(`Operation ${idx + 1}: missing table name — skipped`)
+        return
+      }
+      const tableValidation = validateSQLIdentifier(op.tableName)
+      if (!tableValidation.valid) {
+        warnings.push(`Operation ${idx + 1}: invalid table name "${op.tableName}" — skipped`)
+        return
+      }
+      if (!op.columnMappings || op.columnMappings.length === 0) {
+        warnings.push(`Operation ${idx + 1}: no column mappings — skipped`)
+        return
+      }
+      if (!op.id) op.id = `op${Date.now()}_${idx}`
+      if (!op.conditions) op.conditions = []
+      if (op.order === undefined) op.order = idx
+      operations.push(op)
+    })
+
+    return { reply, operations: operations.length > 0 ? operations : undefined }
+  } catch {
+    // JSON parse failed — treat as normal conversational reply
+    return { reply }
+  }
 }
 
 /**
