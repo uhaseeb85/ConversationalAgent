@@ -119,10 +119,16 @@ export function HomePage() {
           Create customizable question flows, collect customer information through a friendly chat interface, and generate SQL statements for seamless system integration.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link to="/flows/new">
+          <Link to="/ai-flow-builder">
             <Button size="lg" className="shadow-lg shadow-primary/20">
+              <Sparkles className="h-5 w-5 mr-2" />
+              Build with AI
+            </Button>
+          </Link>
+          <Link to="/flows/new">
+            <Button size="lg" variant="outline">
               <Plus className="h-5 w-5 mr-2" />
-              Create New Flow
+              Create Manually
             </Button>
           </Link>
           <Link to="/submissions">
@@ -167,7 +173,7 @@ export function HomePage() {
                 <div>
                   <p className="font-medium text-sm">Create a Flow</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Click <Link to="/flows/new" className="text-primary underline">Create Flow</Link> to define questions and SQL mappings.
+                    Use the <Link to="/ai-flow-builder" className="text-primary underline">AI Flow Builder</Link> to generate questions and SQL from a description, or <Link to="/flows/new" className="text-primary underline">Create manually</Link>.
                   </p>
                 </div>
               </div>
@@ -228,12 +234,20 @@ export function HomePage() {
             <p className="text-muted-foreground mb-6 text-center max-w-md">
               Get started by creating your first onboarding flow. Define custom questions and start collecting customer data.
             </p>
-            <Link to="/flows/new">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Flow
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Link to="/ai-flow-builder">
+                <Button>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Build with AI
+                </Button>
+              </Link>
+              <Link to="/flows/new">
+                <Button variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Manually
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -312,7 +326,7 @@ export function HomePage() {
 
       {/* Features Section */}
       {flows.length === 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-24">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mt-24">
           <div className="text-center">
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
               <MessageSquare className="h-6 w-6 text-primary" />
@@ -321,6 +335,17 @@ export function HomePage() {
             <p className="text-sm text-muted-foreground">
               Natural chat interface that guides customers through each question smoothly
             </p>
+          </div>
+          <div className="text-center">
+            <Link to="/ai-flow-builder" className="block group">
+              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/20 transition-colors">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-2 group-hover:text-primary transition-colors">AI Flow Builder</h3>
+              <p className="text-sm text-muted-foreground">
+                Describe your goal in plain text and let AI generate questions, SQL mappings, and collaboratively refine the DML operations through conversation
+              </p>
+            </Link>
           </div>
           <div className="text-center">
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
