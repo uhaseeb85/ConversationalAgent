@@ -6,6 +6,7 @@
 import { chatCompletion, streamChatCompletion, loadAIConfig, type ChatMessage } from './ai-client'
 import { schemaContextToJSON, type SchemaContext } from './schema-context-builder'
 import { validateSQLIdentifier } from './sql-generator'
+import { generateId } from './utils'
 import type { Question, QuestionType, SQLOperation } from '../types'
 
 const VALID_QUESTION_TYPES: QuestionType[] = [
@@ -551,7 +552,7 @@ ${schemaJSON}`
         warnings.push(`Operation ${idx + 1}: no column mappings — skipped`)
         return
       }
-      if (!op.id) op.id = `op${Date.now()}_${idx}`
+      if (!op.id) op.id = generateId()
       if (!op.conditions) op.conditions = []
       if (op.order === undefined) op.order = idx
       operations.push(op)

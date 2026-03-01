@@ -259,7 +259,14 @@ export function AIFlowBuilderPage() {
       const markerIdx = reply.indexOf('OPERATIONS_FINAL:')
       const visibleReply = markerIdx !== -1 ? reply.slice(0, markerIdx).trim() : reply
 
-      const assistantText = visibleReply || (operations ? '✅ I\'ve designed the SQL operations based on our conversation. Review them below and click **Accept** to use them.' : reply)
+      let assistantText: string
+      if (visibleReply) {
+        assistantText = visibleReply
+      } else if (operations) {
+        assistantText = "✅ I've designed the SQL operations based on our conversation. Review them below and click **Accept** to use them."
+      } else {
+        assistantText = reply
+      }
 
       setSqlChatMessages((prev) => [...prev, { role: 'assistant', content: assistantText }])
       setStreamingReply('')
@@ -275,8 +282,9 @@ export function AIFlowBuilderPage() {
       setStreamingReply('')
     } finally {
       setIsSqlChatLoading(false)
-      // Scroll chat to bottom
-      setTimeout(() => sqlChatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+      // Delay gives the DOM time to render the new message before scrolling
+      const SCROLL_DELAY_MS = 50
+      setTimeout(() => sqlChatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), SCROLL_DELAY_MS)
     }
   }
 
@@ -922,9 +930,9 @@ export function AIFlowBuilderPage() {
 
                 {/* Chat input */}
                 <div className="flex gap-2">
-                  <input
+                  <Input
                     type="text"
-                    className="flex-1 border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1"
                     placeholder="Describe the DML you need, or answer the AI's question…"
                     value={sqlChatInput}
                     onChange={(e) => setSqlChatInput(e.target.value)}
